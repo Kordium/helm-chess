@@ -158,30 +158,58 @@ def download_and_install(url, install_dir=None, backup=True):
                 if os.path.isfile(existing):
                     shutil.copy2(existing, os.path.join(backup_dir, name))
 
-        # Anything shipped inside a synced subfolder, such as the sounds.
+        # Synced subfolders, such as the sounds, are replaced wholesale rather
+        # than merged. Renaming or dropping a sound then leaves no orphan
+        # behind, and what you have on disk is always exactly what the release
+        # shipped. Two things stop that being dangerous: a folder is only
+        # touched when the download actually contains it with files in it, so
+        # a release that forgot to include one cannot wipe yours; and the old
+        # contents go to the backup first, so a failure puts them all back.
         bundled = []
+        replaced_folders = []
         for folder in SYNC_FOLDERS:
             source_folder = os.path.join(source, folder)
             if not os.path.isdir(source_folder):
                 continue
-            for name in os.listdir(source_folder):
-                if (name.lower().endswith(SYNC_SUFFIXES)
-                        and os.path.isfile(os.path.join(source_folder, name))):
-                    bundled.append((folder, name))
+            names = [
+                name for name in os.listdir(source_folder)
+                if name.lower().endswith(SYNC_SUFFIXES)
+                and os.path.isfile(os.path.join(source_folder, name))
+            ]
+            if not names:
+                continue        # an empty folder is never treated as "delete everything"
+            replaced_folders.append(folder)
+            bundled.extend((folder, name) for name in names)
 
         if backup:
-            for folder, name in bundled:
-                existing = os.path.join(install_dir, folder, name)
-                if os.path.isfile(existing):
-                    target = os.path.join(backup_dir, folder)
-                    os.makedirs(target, exist_ok=True)
-                    shutil.copy2(existing, os.path.join(target, name))
+            for folder in replaced_folders:
+                existing_folder = os.path.join(install_dir, folder)
+                if not os.path.isdir(existing_folder):
+                    continue
+                target = os.path.join(backup_dir, folder)
+                os.makedirs(target, exist_ok=True)
+                for name in os.listdir(existing_folder):
+                    existing = os.path.join(existing_folder, name)
+                    if os.path.isfile(existing):
+                        shutil.copy2(existing, os.path.join(target, name))
 
         changed = []
         try:
             for name in incoming:
                 shutil.copy2(os.path.join(source, name), os.path.join(install_dir, name))
                 changed.append(name)
+
+            # Clear the folders we are about to refill, so nothing from an
+            # older release lingers under a name we no longer use.
+            for folder in replaced_folders:
+                existing_folder = os.path.join(install_dir, folder)
+                if not os.path.isdir(existing_folder):
+                    continue
+                for name in os.listdir(existing_folder):
+                    stale = os.path.join(existing_folder, name)
+                    if os.path.isfile(stale) and name.lower().endswith(SYNC_SUFFIXES):
+                        os.remove(stale)
+
             for folder, name in bundled:
                 destination = os.path.join(install_dir, folder)
                 os.makedirs(destination, exist_ok=True)

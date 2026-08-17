@@ -666,6 +666,108 @@ def test_black_orientation():
         release_app(app)
 
 
+def test_updater_folder_replacement():
+    """The sounds folder is replaced wholesale, and that must stay safe.
+
+    Runs the real installer against fake release zips built in the shape
+    GitHub produces, so none of this touches the network.
+    """
+    print("\nupdater folder replacement")
+    import io
+    import tempfile
+    import zipfile
+
+    padding = "x" * 40000   # clears the updater's minimum-size sanity check
+
+    def make_zip(top_files, folders):
+        buffer = io.BytesIO()
+        top_files = dict(top_files)
+        top_files["NOTES.txt"] = padding
+        with zipfile.ZipFile(buffer, "w") as archive:
+            for name, content in top_files.items():
+                archive.writestr("helm-chess-abc123/%s" % name, content)
+            for folder, files in folders.items():
+                for name, content in files.items():
+                    archive.writestr("helm-chess-abc123/%s/%s" % (folder, name), content)
+                if not files:
+                    archive.writestr("helm-chess-abc123/%s/" % folder, "")
+        return buffer.getvalue()
+
+    def install_from(payload, install_dir):
+        path = os.path.join(tempfile.mkdtemp(), "release.zip")
+        with open(path, "wb") as handle:
+            handle.write(payload)
+        original = updater._open
+        updater._open = lambda url: open(path, "rb")
+        try:
+            return updater.download_and_install("local", install_dir=install_dir)
+        finally:
+            updater._open = original
+
+    def fresh_install():
+        folder = tempfile.mkdtemp(prefix="helm-install-")
+        with open(os.path.join(folder, "version.py"), "w") as handle:
+            handle.write('__version__ = "1.0.0"\n')
+        sounds = os.path.join(folder, "sounds")
+        os.makedirs(sounds)
+        for name in ("capture1.ogg", "capture2.ogg", "select.ogg"):
+            with open(os.path.join(sounds, name), "wb") as handle:
+                handle.write(b"OggS" + b"\0" * 2000)
+        return folder
+
+    def sound_files(folder):
+        path = os.path.join(folder, "sounds")
+        return sorted(os.listdir(path)) if os.path.isdir(path) else []
+
+    untouched = ["capture1.ogg", "capture2.ogg", "select.ogg"]
+    one_sound = {"sounds": {"capture.ogg": b"OggS" + b"\0" * 2000}}
+    version_only = {"version.py": '__version__ = "1.0.1"\n'}
+
+    install = fresh_install()
+    install_from(make_zip(version_only, {
+        "sounds": {"capture.ogg": b"OggS" + b"\0" * 2000,
+                   "move1.ogg": b"OggS" + b"\0" * 2000,
+                   "CREDITS.txt": "credits"}}), install)
+    check("renamed sounds leave no orphans behind",
+          sound_files(install) == ["CREDITS.txt", "capture.ogg", "move1.ogg"],
+          str(sound_files(install)))
+
+    install = fresh_install()
+    install_from(make_zip(version_only, {}), install)
+    check("a release without the folder leaves yours alone",
+          sound_files(install) == untouched, str(sound_files(install)))
+
+    install = fresh_install()
+    install_from(make_zip(version_only, {"sounds": {}}), install)
+    check("an empty folder is not read as a delete order",
+          sound_files(install) == untouched, str(sound_files(install)))
+
+    install = fresh_install()
+    engines = os.path.join(install, "engines")
+    os.makedirs(engines)
+    with open(os.path.join(engines, "stockfish.exe"), "wb") as handle:
+        handle.write(b"MZ" + b"\0" * 5000)
+    install_from(make_zip(version_only, one_sound), install)
+    check("a Stockfish you installed yourself survives",
+          os.path.isfile(os.path.join(engines, "stockfish.exe")))
+
+    install = fresh_install()
+    install_from(make_zip(version_only, one_sound), install)
+    backup = os.path.join(install, ".update-backup", "sounds")
+    check("the replaced sounds are recoverable from the backup",
+          os.path.isdir(backup) and sorted(os.listdir(backup)) == untouched,
+          str(sorted(os.listdir(backup)) if os.path.isdir(backup) else "no backup"))
+
+    install = fresh_install()
+    try:
+        install_from(make_zip({"something_else.py": "nope"}, {}), install)
+        check("a download that is not Helm Chess is refused", False)
+    except updater.UpdateError:
+        check("a download that is not Helm Chess is refused", True)
+    check("the refused download changed nothing",
+          sound_files(install) == untouched, str(sound_files(install)))
+
+
 def test_settings_menu():
     print("\nsettings menu")
     app = make_app()
@@ -788,6 +890,7 @@ def main():
     test_describe()
     test_engine()
     test_updater()
+    test_updater_folder_replacement()
     test_real_key_delivery()
     test_navigation()
     test_selection_and_movement()

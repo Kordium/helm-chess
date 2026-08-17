@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.4
+
+- The `sounds` folder is now replaced wholesale on update rather than merged
+  into. Rename or drop a sound and no orphan is left behind, so what you
+  have on disk is always exactly what the release shipped.
+- Two things keep that safe. A folder is only touched when the download
+  actually contains it with files in it, so a release that forgot to include
+  one cannot wipe yours. And the old contents go to `.update-backup` first.
+- Your own `engines` folder is still never touched, so an update cannot
+  delete a Stockfish you installed yourself.
+
 ## 1.0.3
 
 - The sword unsheathe is now the capture sound, replacing the two sword
