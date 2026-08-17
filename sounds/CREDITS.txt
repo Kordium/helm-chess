@@ -1,0 +1,57 @@
+Sounds used by Helm Chess
+============================================================
+
+Every file here is Creative Commons 0 (public domain), taken
+from Freesound. No attribution is legally required, but the
+people who made them deserve the credit anyway.
+
+capture1.ogg  (capture)
+  "Sword_Clash (46).wav" by JohnBuhr
+  https://freesound.org/s/326795/
+  http://creativecommons.org/publicdomain/zero/1.0/, 1.18 seconds
+
+capture2.ogg  (capture)
+  "Sword_Clash (2).wav" by JohnBuhr
+  https://freesound.org/s/326841/
+  http://creativecommons.org/publicdomain/zero/1.0/, 1.45 seconds
+
+castle.ogg  (castle)
+  "clank.wav" by Empiremonkey
+  https://freesound.org/s/616492/
+  http://creativecommons.org/publicdomain/zero/1.0/, 0.52 seconds
+
+check.ogg  (check)
+  "Sword_Clash (57).wav" by JohnBuhr
+  https://freesound.org/s/326862/
+  http://creativecommons.org/publicdomain/zero/1.0/, 1.60 seconds
+
+gameover.ogg  (gameover)
+  "Axe Slash 1" by smokebomb99
+  https://freesound.org/s/147290/
+  http://creativecommons.org/publicdomain/zero/1.0/, 0.72 seconds
+
+move1.ogg  (move)
+  "Wooden Stick Swing 1_2" by Joao_Janz
+  https://freesound.org/s/485277/
+  http://creativecommons.org/publicdomain/zero/1.0/, 0.71 seconds
+
+move2.ogg  (move)
+  "Woosh 1" by mateusboga
+  https://freesound.org/s/614084/
+  http://creativecommons.org/publicdomain/zero/1.0/, 0.17 seconds
+
+promote.ogg  (promote)
+  "Fast Warp In" by GammaGool
+  https://freesound.org/s/735062/
+  http://creativecommons.org/publicdomain/zero/1.0/, 1.23 seconds
+
+refused.ogg  (refused)
+  "Fruit Impact 1" by OwlStorm
+  https://freesound.org/s/209012/
+  http://creativecommons.org/publicdomain/zero/1.0/, 0.43 seconds
+
+select.ogg  (select)
+  "Sword Unsheathe" by SecureSubset
+  https://freesound.org/s/788532/
+  http://creativecommons.org/publicdomain/zero/1.0/, 1.00 seconds
+

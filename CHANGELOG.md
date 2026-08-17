@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2
+
+- Added a `sounds` folder of sword and impact effects, all Creative Commons
+  0, credited in `sounds/CREDITS.txt`. They are not wired into the game yet.
+- The updater now keeps bundled folders such as `sounds` in step with the
+  rest of the game. Your own `engines` folder is deliberately left alone, so
+  an update never deletes a Stockfish you installed yourself.
+
 ## 1.0.1
 
 - New settings menu, opened with **O**. Walk it with up and down, change

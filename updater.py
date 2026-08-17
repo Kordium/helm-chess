@@ -35,7 +35,13 @@ BRANCH_ZIP = "https://github.com/%s/%s/archive/refs/heads/main.zip"
 
 # Files the updater is allowed to replace. Anything else in the folder --
 # saved games, a Stockfish binary you dropped in, notes -- is left alone.
-UPDATABLE_SUFFIXES = (".py", ".md", ".txt")
+UPDATABLE_SUFFIXES = (".py", ".md", ".txt", ".bat")
+
+# Subfolders that ship with the game and are kept in step with it. The
+# engines folder is deliberately not here: that is where you put your own
+# Stockfish, and an update must never wipe it.
+SYNC_FOLDERS = ("sounds",)
+SYNC_SUFFIXES = (".ogg", ".wav", ".txt", ".json")
 
 
 class UpdateError(Exception):
@@ -97,6 +103,16 @@ def check_for_update():
     return None
 
 
+def _restore(backup_dir, install_dir):
+    """Put the backed-up copy back, subfolders included."""
+    for root, _dirs, files in os.walk(backup_dir):
+        relative = os.path.relpath(root, backup_dir)
+        target = install_dir if relative == "." else os.path.join(install_dir, relative)
+        os.makedirs(target, exist_ok=True)
+        for name in files:
+            shutil.copy2(os.path.join(root, name), os.path.join(target, name))
+
+
 def download_and_install(url, install_dir=None, backup=True):
     """Fetch the zip and copy the updated files over the installation.
 
@@ -142,16 +158,39 @@ def download_and_install(url, install_dir=None, backup=True):
                 if os.path.isfile(existing):
                     shutil.copy2(existing, os.path.join(backup_dir, name))
 
+        # Anything shipped inside a synced subfolder, such as the sounds.
+        bundled = []
+        for folder in SYNC_FOLDERS:
+            source_folder = os.path.join(source, folder)
+            if not os.path.isdir(source_folder):
+                continue
+            for name in os.listdir(source_folder):
+                if (name.lower().endswith(SYNC_SUFFIXES)
+                        and os.path.isfile(os.path.join(source_folder, name))):
+                    bundled.append((folder, name))
+
+        if backup:
+            for folder, name in bundled:
+                existing = os.path.join(install_dir, folder, name)
+                if os.path.isfile(existing):
+                    target = os.path.join(backup_dir, folder)
+                    os.makedirs(target, exist_ok=True)
+                    shutil.copy2(existing, os.path.join(target, name))
+
         changed = []
         try:
             for name in incoming:
                 shutil.copy2(os.path.join(source, name), os.path.join(install_dir, name))
                 changed.append(name)
+            for folder, name in bundled:
+                destination = os.path.join(install_dir, folder)
+                os.makedirs(destination, exist_ok=True)
+                shutil.copy2(os.path.join(source, folder, name),
+                             os.path.join(destination, name))
+                changed.append("%s/%s" % (folder, name))
         except Exception as exc:
             if backup_dir:
-                for name in os.listdir(backup_dir):
-                    shutil.copy2(os.path.join(backup_dir, name),
-                                 os.path.join(install_dir, name))
+                _restore(backup_dir, install_dir)
             raise UpdateError("copy failed and the old version was restored: %s" % exc)
 
         return sorted(changed)

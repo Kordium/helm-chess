@@ -1,0 +1,112 @@
+[
+  {
+    "file": "move1.ogg",
+    "role": "move",
+    "id": 485277,
+    "title": "Wooden Stick Swing 1_2",
+    "author": "Joao_Janz",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 0.71,
+    "url": "https://freesound.org/s/485277/",
+    "size": 16114
+  },
+  {
+    "file": "move2.ogg",
+    "role": "move",
+    "id": 614084,
+    "title": "Woosh 1",
+    "author": "mateusboga",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 0.17,
+    "url": "https://freesound.org/s/614084/",
+    "size": 7282
+  },
+  {
+    "file": "capture1.ogg",
+    "role": "capture",
+    "id": 326795,
+    "title": "Sword_Clash (46).wav",
+    "author": "JohnBuhr",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 1.18,
+    "url": "https://freesound.org/s/326795/",
+    "size": 16944
+  },
+  {
+    "file": "capture2.ogg",
+    "role": "capture",
+    "id": 326841,
+    "title": "Sword_Clash (2).wav",
+    "author": "JohnBuhr",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 1.45,
+    "url": "https://freesound.org/s/326841/",
+    "size": 19707
+  },
+  {
+    "file": "check.ogg",
+    "role": "check",
+    "id": 326862,
+    "title": "Sword_Clash (57).wav",
+    "author": "JohnBuhr",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 1.6,
+    "url": "https://freesound.org/s/326862/",
+    "size": 21487
+  },
+  {
+    "file": "select.ogg",
+    "role": "select",
+    "id": 788532,
+    "title": "Sword Unsheathe",
+    "author": "SecureSubset",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 1.0,
+    "url": "https://freesound.org/s/788532/",
+    "size": 19467
+  },
+  {
+    "file": "refused.ogg",
+    "role": "refused",
+    "id": 209012,
+    "title": "Fruit Impact 1",
+    "author": "OwlStorm",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 0.43,
+    "url": "https://freesound.org/s/209012/",
+    "size": 8905
+  },
+  {
+    "file": "castle.ogg",
+    "role": "castle",
+    "id": 616492,
+    "title": "clank.wav",
+    "author": "Empiremonkey",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 0.52,
+    "url": "https://freesound.org/s/616492/",
+    "size": 10370
+  },
+  {
+    "file": "promote.ogg",
+    "role": "promote",
+    "id": 735062,
+    "title": "Fast Warp In",
+    "author": "GammaGool",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 1.23,
+    "url": "https://freesound.org/s/735062/",
+    "size": 23000
+  },
+  {
+    "file": "gameover.ogg",
+    "role": "gameover",
+    "id": 147290,
+    "title": "Axe Slash 1",
+    "author": "smokebomb99",
+    "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+    "duration": 0.72,
+    "url": "https://freesound.org/s/147290/",
+    "size": 19325
+  }
+]
