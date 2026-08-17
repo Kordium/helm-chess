@@ -17,6 +17,31 @@ by, or derived from any other chess product, and it shares no code with one.
 It runs on any computer that can run Python. No graphics card, no browser,
 no account, no internet connection needed to play.
 
+## The first time you run it
+
+It asks one question: **do you use a screen reader?**
+
+- **Yes** — everything is spoken through NVDA, JAWS or SAPI.
+- **No** — nothing is spoken. Every announcement is written on screen
+  instead, under the board.
+
+If you answer no by mistake, the program goes quiet and there is no spoken
+way back to the setting. So **control shift G turns speech on from anywhere,
+at any time**, whatever else is going on. It is checked before every other
+key in the program and it always works.
+
+## Watching a game
+
+There is a proper board on screen: pieces, coordinates, and highlights for
+the square you are on, the piece you picked up, where it would land, the
+opponent's last move, and a king in check. None of it is needed to play, but
+it means someone sitting next to you can follow along.
+
+![The board mid-game. A white bishop on c4 is picked up and outlined in
+green, the square b5 it would move to is outlined in orange, and the black
+pawn's last move from d7 to d6 is highlighted. A status line underneath reads
+"white to move, last: d6, built-in engine, level 1 of 8".](screenshot.png)
+
 ## Installing
 
 1. Install Python 3.8 or newer from <https://www.python.org/downloads/>.
@@ -117,6 +142,8 @@ Promotion asks which piece: **q**, **r**, **b**, or **n**.
 - **Control N** starts a new game at the difficulty you are on. **Control S**
   saves the game to a PGN file. **Control U** checks for updates.
 - **Shift and escape** asks whether you want to close the program.
+- **Control shift G** turns speech on, from anywhere, whatever the settings
+  say. This is the way back if speech ever gets switched off by accident.
 
 The cursor stays where you put it when the opponent moves. You are not
 dragged across the board every time it plays, so you keep your place. Press
@@ -181,6 +208,26 @@ dialog box; it is all spoken.
 
 Settings and saved games live in `%APPDATA%\ProjectGolem`, not in the project
 folder, so updating the game never disturbs them.
+
+## Building a single executable
+
+```bash
+python build_exe.py
+```
+
+That produces `dist/ProjectGolem.exe`, about 14 MB, which runs on a Windows
+machine with no Python installed at all. That is the point of it: handing the
+game to someone who should not have to install anything first.
+
+It is worth being straight about one thing. Packing the game into an exe does
+**not** protect the source. PyInstaller stores the Python bytecode inside the
+executable and freely available tools unpack it again in seconds. Treat the
+exe as a convenience, not a lock.
+
+The exe cannot update itself, since its code lives inside the executable
+rather than in files beside it. It still tells you when a new version is out
+and points you at the releases page to download it. The source install
+updates itself as normal.
 
 ## Checking it still works
 

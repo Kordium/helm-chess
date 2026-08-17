@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.0
+
+- **A real board on screen.** Pieces, coordinates, and highlights for the
+  square you are on, the piece you are holding, where it would land, the
+  opponent's last move, and a king in check. Play is unchanged; this is so
+  someone watching can follow the game.
+- **A question on the first run:** do you use a screen reader? Answer no and
+  nothing is spoken; every announcement is written on screen instead.
+- **Control shift G turns speech on from anywhere**, whatever the settings
+  say, in case that question is ever answered wrongly. The way back out is
+  spoken aloud before speech is switched off, too.
+- **`build_exe.py`** builds a single Windows executable that runs without
+  Python installed. It reports new versions but cannot install them into
+  itself, so it points at the releases page instead.
+- Drawing is only redone when the position changes, so walking the cursor
+  around costs about five milliseconds a press rather than thirty-seven.
+
 ## 1.2.0
 
 - The opponent now waits a second before answering, so its move is no longer

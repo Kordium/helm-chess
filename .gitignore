@@ -5,3 +5,8 @@ engines/
 *.pgn
 settings.json
 .venv/
+
+# PyInstaller output. The executable is attached to a release, never committed.
+build/
+dist/
+*.spec

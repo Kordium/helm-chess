@@ -52,6 +52,42 @@ def _unit(value):
     """-1, 0 or 1, for turning a distance into a direction."""
     return (value > 0) - (value < 0)
 
+
+# The drawn board. None of this matters to play; it is so someone watching
+# over your shoulder can follow the game.
+LIGHT_SQUARE = "#f0d9b5"
+DARK_SQUARE = "#b58863"
+SURROUND = "#312e2b"
+COORD_TEXT = "#d8d2cb"
+LAST_MOVE_TINT = "#cdd26a"      # where the opponent just played
+CURSOR_OUTLINE = "#2f7fd1"      # where you are looking
+SELECTED_OUTLINE = "#3fa14a"    # the piece you picked up
+GHOST_OUTLINE = "#e8a33d"       # where it would land
+CHECK_TINT = "#d64541"
+
+
+def _blend(top, bottom):
+    """Halfway between two hex colours, for tinting the darker squares."""
+    pairs = [(int(top[i:i + 2], 16), int(bottom[i:i + 2], 16)) for i in (1, 3, 5)]
+    return "#" + "".join("%02x" % ((a + b) // 2) for a, b in pairs)
+
+PIECE_WHITE = "#fbfaf7"
+PIECE_BLACK = "#141414"
+
+# Only the solid glyphs are used, filled white or black for the two sides,
+# with a contrasting edge drawn around them so neither colour disappears into
+# the square beneath it.
+#
+# The obvious approach -- hollow glyph for white, solid for black, as printed
+# diagrams do -- does not survive contact with real fonts. Overlaying the
+# pair to colour them made the rook come out white on both sides and the
+# queen black on both, because the two glyphs are not drawn to matching
+# shapes. One glyph set, filled explicitly, cannot go wrong that way.
+SOLID_GLYPHS = {
+    chess.KING: "♚", chess.QUEEN: "♛", chess.ROOK: "♜",
+    chess.BISHOP: "♝", chess.KNIGHT: "♞", chess.PAWN: "♟",
+}
+
 PROMOTION_KEYS = {
     "q": chess.QUEEN,
     "r": chess.ROOK,
@@ -66,6 +102,9 @@ DEFAULT_SETTINGS = {
     "play_as": "white",
     "phonetic_files": False,  # say "echo 4" instead of "e4"
     "inverted": False,        # see SETTINGS_ITEMS below
+    # None until the first run asks. True speaks through your screen reader;
+    # False keeps quiet and writes everything on screen instead.
+    "screen_reader": None,
     "prefer_stockfish": True,
     "stockfish_path": "",
     "check_updates_on_start": True,
@@ -113,6 +152,16 @@ SETTINGS_ITEMS = [
         "kind": "choice",
         "choices": ["white", "black"],
         "description": "Which colour you take. This applies to the next new game.",
+    },
+    {
+        "key": "screen_reader",
+        "label": "Speak everything",
+        "kind": "toggle",
+        "description": (
+            "On speaks through NVDA, JAWS or SAPI. Off stays silent and "
+            "writes every announcement on screen instead. Control shift G "
+            "turns speech back on from anywhere, whatever this is set to."
+        ),
     },
     {
         "key": "phonetic_files",
@@ -231,7 +280,7 @@ class ProjectGolem(tk.Tk):
         super().__init__()
         self.settings = settings
         self.title(APP_NAME)
-        self.geometry("520x360")
+        self.geometry("760x720")    # room for a board worth looking at
 
         self.board = chess.Board()
         self.human_color = chess.BLACK if settings["play_as"] == "black" else chess.WHITE
@@ -253,6 +302,9 @@ class ProjectGolem(tk.Tk):
         self._menu = None
         self._game_active = False
         self._reply_timer = None
+        self._recent = []
+        self._drawn = None      # what the canvas currently shows
+        self._status_cache = None
 
         # Chord tracking. `_held` stops key auto-repeat from firing a chord
         # over and over; `_chord` is what actually gets resolved.
@@ -285,35 +337,275 @@ class ProjectGolem(tk.Tk):
     # -- window ------------------------------------------------------------
 
     def _build_window(self):
+        self.configure(bg=SURROUND)
+        self.minsize(420, 420)
+
+        # Drawn board for anyone watching. The menu uses a plain label.
+        self.canvas = tk.Canvas(self, bg=SURROUND, highlightthickness=0)
         self.display = tk.Label(
-            self, font=("Consolas", 12), justify="left", anchor="nw", padx=10, pady=10,
+            self, font=("Consolas", 14), justify="left", anchor="nw",
+            padx=16, pady=16, bg=SURROUND, fg=COORD_TEXT,
         )
-        self.display.pack(fill="both", expand=True)
-        self.status = tk.Label(self, anchor="w", padx=10, pady=4)
-        self.status.pack(fill="x")
+        self.status = tk.Label(self, anchor="w", padx=10, pady=6,
+                               bg=SURROUND, fg=COORD_TEXT)
+        self.status.pack(side="bottom", fill="x")
+
+        # Everything the game says, written down, for anyone not using a
+        # screen reader. Packed only when it is wanted.
+        # No fixed height: announcements wrap, and a fixed height clipped the
+        # longer ones in half. It grows to fit instead.
+        self.message = tk.Label(
+            self, anchor="w", justify="left", padx=10, pady=8,
+            bg=SURROUND, fg="#f4e7c8", font=(None, 11), wraplength=600,
+        )
+        # Long announcements have to wrap to the window, not run off the edge.
+        self.bind("<Configure>", self._fit_message_width)
+        self._recent = []
+        self._sync_message_panel()
+
+        self.canvas.pack(fill="both", expand=True)
+        self._showing = "board"
+
+        self._piece_font_family = self._pick_piece_font()
+        # Redraw when the window is resized, so the board always fits.
+        self.canvas.bind("<Configure>", lambda _event: self._draw_board())
         self._refresh()
+
+    def _fit_message_width(self, event=None):
+        width = (event.width if event is not None else self.winfo_width()) - 30
+        if width > 100 and abs(self.message.cget("wraplength") - width) > 8:
+            self.message.config(wraplength=width)
+
+    def _sync_message_panel(self):
+        """Show the written announcements only when speech is turned off."""
+        wanted = self.settings.get("screen_reader") is not True
+        showing = bool(self.message.winfo_manager())
+        if wanted and not showing:
+            self.message.pack(side="bottom", fill="x")
+        elif not wanted and showing:
+            self.message.pack_forget()
+
+    def _pick_piece_font(self):
+        """Find a font on this machine that actually has the chess glyphs."""
+        try:
+            import tkinter.font as tkfont
+            available = {name.lower() for name in tkfont.families(self)}
+        except Exception:
+            return "Segoe UI Symbol"
+        for candidate in ("Segoe UI Symbol", "Segoe UI Historic", "DejaVu Sans",
+                          "Arial Unicode MS", "FreeSerif", "Symbola"):
+            if candidate.lower() in available:
+                return candidate
+        return "TkDefaultFont"
+
+    def _show(self, what):
+        """Swap between the drawn board and the menu list."""
+        if self._showing == what:
+            return
+        if what == "board":
+            self.display.pack_forget()
+            self.canvas.pack(fill="both", expand=True)
+        else:
+            self.canvas.pack_forget()
+            self.display.pack(fill="both", expand=True)
+        self._showing = what
+
+    def _draw_board(self):
+        """Paint the position. Purely visual; the game never reads any of it.
+
+        Squares, coordinates and pieces are only redrawn when the position
+        or the window size actually changes. Walking the cursor around
+        redraws three outlines and nothing else, which is the difference
+        between 37 ms and well under a millisecond for every arrow press.
+        """
+        canvas = self.canvas
+
+        width = max(canvas.winfo_width(), 1)
+        height = max(canvas.winfo_height(), 1)
+        if width < 40 or height < 40:
+            return                      # not laid out yet
+
+        margin = 28      # room for the coordinates outside the board
+        size = max(16, (min(width, height) - 2 * margin) // 8)
+        board_size = size * 8
+        left = (width - board_size) // 2
+        top = (height - board_size) // 2
+
+        flipped = self.human_color == chess.BLACK and not self.settings["inverted"]
+        last = self.board.move_stack[-1] if self.board.move_stack else None
+        checked_king = (self.board.king(self.board.turn)
+                        if self.board.is_check() else None)
+
+        def place(square):
+            """Top-left pixel of a square, respecting which way the board faces."""
+            file = chess.square_file(square)
+            rank = chess.square_rank(square)
+            column = 7 - file if flipped else file
+            row = rank if flipped else 7 - rank
+            return left + column * size, top + row * size
+
+        signature = (self.board.board_fen(), flipped, size, left, top,
+                     last.uci() if last is not None else None, checked_king)
+        if signature == self._drawn:
+            self._draw_overlay(place, size)
+            return
+        self._drawn = signature
+        canvas.delete("all")
+
+        for square in chess.SQUARES:
+            x, y = place(square)
+            light = (chess.square_file(square) + chess.square_rank(square)) % 2 == 1
+            fill = LIGHT_SQUARE if light else DARK_SQUARE
+            if last is not None and square in (last.from_square, last.to_square):
+                fill = LAST_MOVE_TINT if light else _blend(LAST_MOVE_TINT, DARK_SQUARE)
+            if square == checked_king:
+                fill = CHECK_TINT
+            canvas.create_rectangle(x, y, x + size, y + size, fill=fill, width=0)
+
+        # Coordinates around the edge, so a watcher can name squares too.
+        coord_size = max(7, size // 5)
+        for index in range(8):
+            file_letter = "abcdefgh"[7 - index if flipped else index]
+            rank_number = "%d" % ((index + 1) if flipped else (8 - index))
+            gap = max(12, int(size * 0.22))
+            canvas.create_text(left + index * size + size / 2,
+                               top + board_size + gap,
+                               text=file_letter, fill=COORD_TEXT,
+                               font=(None, coord_size))
+            canvas.create_text(left - gap, top + index * size + size / 2,
+                               text=rank_number, fill=COORD_TEXT,
+                               font=(None, coord_size))
+
+        glyph_font = (self._piece_font_family, int(size * 0.72))
+        for square, piece in self.board.piece_map().items():
+            x, y = place(square)
+            centre_x = x + size / 2
+            centre_y = y + size / 2 + size * 0.04
+            glyph = SOLID_GLYPHS[piece.piece_type]
+            body = PIECE_WHITE if piece.color == chess.WHITE else PIECE_BLACK
+            edge = PIECE_BLACK if piece.color == chess.WHITE else PIECE_WHITE
+            # The edge is the same silhouette nudged around underneath, which
+            # keeps a white piece visible on a light square and a black one on
+            # a dark square.
+            spread = max(1, int(size * 0.035))
+            for dx, dy in ((-spread, 0), (spread, 0), (0, -spread), (0, spread),
+                           (-spread, -spread), (spread, -spread),
+                           (-spread, spread), (spread, spread)):
+                canvas.create_text(centre_x + dx, centre_y + dy, text=glyph,
+                                   fill=edge, font=glyph_font)
+            canvas.create_text(centre_x, centre_y, text=glyph,
+                               fill=body, font=glyph_font)
+
+        self._draw_overlay(place, size)
+
+    def _draw_overlay(self, place, size):
+        """Just the three markers: what you picked up, where it would go, and
+        where you are looking. Cheap enough to redraw on every keypress."""
+        canvas = self.canvas
+        canvas.delete("overlay")
+
+        def outline(square, colour, inset, width):
+            if square is None:
+                return
+            x, y = place(square)
+            canvas.create_rectangle(x + inset, y + inset,
+                                    x + size - inset, y + size - inset,
+                                    outline=colour, width=width, tags=("overlay",))
+
+        if self.selected is not None:
+            outline(self.selected, SELECTED_OUTLINE, 2, 3)
+            if self.ghost is not None and self.ghost != self.selected:
+                outline(self.ghost, GHOST_OUTLINE, 4, 3)
+        if self._game_active:
+            outline(self.cursor, CURSOR_OUTLINE, 1, 2)
 
     def _refresh(self):
         if self._menu is not None:
             lines = [self._menu["title"], ""]
             for index, item in enumerate(self._menu["items"]):
-                marker = ">" if index == self._menu["index"] else " "
+                marker = "→" if index == self._menu["index"] else "  "
                 lines.append("%s %s" % (marker, item["label"]))
             self.display.config(text="\n".join(lines))
             self.status.config(text="Up and down to move, enter to choose")
+            self._show("menu")
             return
 
-        self.display.config(text=describe.render_board(
-            self.board, self.cursor, self.selected, self.ghost,
-        ))
-        self.status.config(text="%s  |  %s  |  F1 for help" % (
-            describe.describe_status(self.board), self.opponent.describe(),
-        ))
+        self._show("board")
+        self._draw_board()
+        self.status.config(text=self._status_line())
+
+    def _status_line(self):
+        """One line a watcher can read to see where the game stands.
+
+        Cached, because working out the move in chess notation copies the
+        board, and this would otherwise run on every arrow press.
+        """
+        key = (self.board.board_fen(), len(self.board.move_stack),
+               self.thinking, self.opponent.level)
+        if self._status_cache is not None and self._status_cache[0] == key:
+            return self._status_cache[1]
+
+        parts = [describe.describe_status(self.board)]
+        if self.board.move_stack:
+            replay = self.board.copy()
+            move = replay.pop()
+            parts.append("last: %s" % replay.san(move))
+        parts.append(self.opponent.describe())
+        if self.thinking:
+            parts.append("thinking")
+        parts.append("F1 for help")
+
+        text = "   |   ".join(parts)
+        self._status_cache = (key, text)
+        return text
 
     def _open_at_start(self):
-        """What you hear when the program opens: the menu, not a board."""
+        """What you meet when the program opens: a question, then the menu."""
         self.say("%s version %s." % (APP_NAME, __version__))
-        self.open_main_menu(announce_title=True)
+        if self.settings.get("screen_reader") is None:
+            self.ask_about_screen_reader()
+        else:
+            self.open_main_menu(announce_title=True)
+
+    def ask_about_screen_reader(self):
+        """Asked once, on the very first run.
+
+        It is both spoken and written large on screen, because at this point
+        we do not yet know which of the two the person can use.
+        """
+        def answer(uses_one):
+            if not uses_one:
+                # Said out loud before the setting takes effect. If this
+                # answer was a mistake, this is the only sentence that can
+                # still reach someone who needs speech.
+                speech.speak("Speech is being turned off. If that was a "
+                             "mistake, press control shift G at any time to "
+                             "turn it back on.")
+            self.settings["screen_reader"] = uses_one
+            save_settings(self.settings)
+            self._sync_message_panel()
+            if uses_one:
+                self.say("Speech it is. You can change this later in settings.")
+            else:
+                self.say("Everything will be shown on screen from now on. "
+                         "Press control shift G to turn speech back on.")
+            self.open_main_menu(announce_title=True)
+
+        items = [
+            {
+                "label": "Yes, I use a screen reader",
+                "description": "Everything will be spoken through it.",
+                "action": lambda: answer(True),
+            },
+            {
+                "label": "No, I do not",
+                "description": ("Nothing will be spoken. Every announcement is "
+                                "written on screen instead. If you pick this by "
+                                "mistake, control shift G turns speech back on."),
+                "action": lambda: answer(False),
+            },
+        ]
+        self._open_menu("Do you use a screen reader?", items)
 
     # -- helpers -----------------------------------------------------------
 
@@ -321,7 +613,35 @@ class ProjectGolem(tk.Tk):
         return self.settings["phonetic_files"]
 
     def say(self, text, interrupt=True):
+        """Announce something.
+
+        Spoken through the screen reader, or written on screen for someone
+        who does not use one. The first run asks which.
+        """
+        self._show_message(text)
+        if self.settings.get("screen_reader") is False:
+            return
         speech.speak(text, interrupt=interrupt)
+
+    def force_speech_on(self):
+        """Control shift G: turn speech back on from anywhere, always."""
+        already = self.settings.get("screen_reader") is True
+        self.settings["screen_reader"] = True
+        save_settings(self.settings)
+        self._sync_message_panel()
+        if already:
+            self.say("Speech is already on.")
+        else:
+            self.say("Speech turned on.")
+
+    def _show_message(self, text):
+        """Keep the last few announcements visible for a sighted player."""
+        if not text:
+            return
+        self._recent.append(text)
+        del self._recent[:-2]       # the last two, so the panel stays small
+        if getattr(self, "message", None) is not None:
+            self.message.config(text="\n".join(self._recent))
 
     def refuse(self, text):
         """Say why something did not happen, with the system's own error sound."""
@@ -350,6 +670,15 @@ class ProjectGolem(tk.Tk):
 
     def _on_key_press(self, event):
         keysym = event.keysym
+
+        # Checked before anything else, and it works from every screen. If
+        # someone who needs speech answers "no" to the first-run question by
+        # mistake, the program goes quiet and they have no way to read their
+        # way back to the setting. This is that way back.
+        if (keysym.lower() == "g" and (event.state & 0x0004)
+                and (event.state & 0x0001)):
+            self.force_speech_on()
+            return "break"
 
         # Menus take the arrows plainly, with no chording.
         if self._menu is not None:
@@ -1258,7 +1587,7 @@ class ProjectGolem(tk.Tk):
             return
 
         if item["kind"] == "toggle":
-            self.settings[key] = not value
+            self.settings[key] = not bool(value)   # an unset value counts as off
         elif item["kind"] == "number":
             step = item.get("step", 1)
             new = value + direction * step
@@ -1284,6 +1613,8 @@ class ProjectGolem(tk.Tk):
         """Some settings need more than storing to take effect."""
         if key == "level":
             self.opponent.set_level(self.settings["level"])
+        elif key == "screen_reader":
+            self._sync_message_panel()
         elif key == "play_as":
             # Changing sides mid-game would be nonsense, so it waits.
             if not self.board.move_stack:
@@ -1328,6 +1659,12 @@ class ProjectGolem(tk.Tk):
         self.after(200, collect)
 
     def _offer_update(self, latest, url, notes):
+        if updater.running_as_exe():
+            # Nothing to install into: the program is a single executable.
+            self.say("Version %s is available. You have %s. Download the new "
+                     "version from %s. %s"
+                     % (latest, __version__, updater.releases_url(), notes[:200]))
+            return
         self.say("Version %s is available. You have %s. Press y to install it, "
                  "or any other key to skip. %s" % (latest, __version__, notes[:200]))
 
@@ -1406,7 +1743,8 @@ HELP_TEXT = (
     "Plus and minus change the opponent's strength. "
     "Control N starts a new game. Control S saves the game. "
     "Control U checks for updates. "
-    "Shift and escape asks whether you want to close the program."
+    "Shift and escape asks whether you want to close the program. "
+    "Control shift G turns speech on if it ever gets switched off."
 )
 
 

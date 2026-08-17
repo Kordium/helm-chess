@@ -44,8 +44,25 @@ SYNC_FOLDERS = ("sounds",)
 SYNC_SUFFIXES = (".ogg", ".wav", ".txt", ".json")
 
 
+RELEASES_PAGE = "https://github.com/%s/%s/releases/latest"
+
+
 class UpdateError(Exception):
     pass
+
+
+def running_as_exe():
+    """True when running from a PyInstaller build rather than the source.
+
+    A frozen build cannot update itself by swapping .py files around: they
+    live inside the executable. So it reports what is available and points at
+    the download instead of pretending to install it.
+    """
+    return getattr(sys, "frozen", False)
+
+
+def releases_url():
+    return RELEASES_PAGE % (GITHUB_OWNER, GITHUB_REPO)
 
 
 def parse_version(text):
@@ -232,8 +249,10 @@ def update(check_only=False):
     if result is None:
         return "Project Golem %s is up to date." % __version__
     latest, url, notes = result
-    if check_only:
+    if check_only or running_as_exe():
         message = "Version %s is available (you have %s)." % (latest, __version__)
+        if running_as_exe():
+            message += "\nDownload the new version from %s" % releases_url()
         return message + ("\n\n" + notes if notes else "")
     changed = download_and_install(url)
     return ("Updated to version %s. %d files replaced. "

@@ -237,6 +237,7 @@ def make_app(**overrides):
             "sounds": False,
             "chord_ms": 60,
             "reply_delay_ms": 120,   # keep the suite quick; the real gap is 1s
+            "screen_reader": True,   # past the first-run question by default
         })
         _APP = project_golem.ProjectGolem(settings)
         _APP.withdraw()     # no window flashing up during the test
@@ -864,7 +865,9 @@ def test_startup_and_menus():
     driver = Driver(app)
     try:
         # Back to how the program actually opens: menu first, no game.
+        # The first-run question is covered separately, so answer it already.
         app._game_active = False
+        app.settings["screen_reader"] = True
         app.board.reset()
         _spoken.clear()
         app._open_at_start()
@@ -1057,6 +1060,83 @@ def test_reply_pause_and_focus():
         release_app(app)
 
 
+def helm_settings_first_label():
+    return project_golem.SETTINGS_ITEMS[0]["label"]
+
+
+def test_first_run_question():
+    """Asked once, and answering "no" must not trap someone who needs speech."""
+    print("\nfirst run question")
+    app = make_app()
+    driver = Driver(app)
+    try:
+        app._game_active = False
+        app.settings["screen_reader"] = None      # as on a fresh install
+        _spoken.clear()
+        app._open_at_start()
+
+        said = all_speech_since(0).lower()
+        check("it asks about a screen reader", "do you use a screen reader" in said,
+              said[:90])
+        check("it is a menu you can answer", app._menu is not None)
+        labels = [item["label"] for item in app._menu["items"]]
+        check("yes comes first", labels[0].startswith("Yes"), str(labels))
+        check("the escape hatch is mentioned in the no option",
+              "control shift g" in app._menu["items"][1]["description"].lower(),
+              app._menu["items"][1]["description"])
+
+        # Answer no, the risky answer.
+        driver.key("Down")
+        mark = len(_spoken)
+        driver.key("Return")
+        said = all_speech_since(mark).lower()
+        check("answering no is recorded", app.settings["screen_reader"] is False)
+        check("the way back is spoken before it goes quiet",
+              "control shift g" in said, said)
+        check("it still reaches the main menu",
+              app._menu is not None and app._menu["title"] == "Main menu",
+              app._menu["title"] if app._menu else "none")
+
+        # Now silent: say() must write to the screen and not speak.
+        mark = len(_spoken)
+        app.say("a test announcement")
+        check("nothing is spoken while silent", len(_spoken) == mark,
+              str(_spoken[mark:]))
+        check("but it is written on screen",
+              "a test announcement" in app.message.cget("text"),
+              app.message.cget("text"))
+        check("the written panel is visible", bool(app.message.winfo_manager()))
+
+        # The escape hatch, from a menu, with speech off.
+        driver.key("g", state=0x0004 | 0x0001)
+        check("control shift G turns speech back on",
+              app.settings["screen_reader"] is True)
+        check("and says so", "speech turned on" in last_speech().lower(),
+              last_speech())
+        check("the written panel goes away again",
+              not app.message.winfo_manager())
+
+        # Pressing it again is harmless.
+        driver.key("g", state=0x0004 | 0x0001)
+        check("pressing it again is harmless",
+              app.settings["screen_reader"] is True
+              and "already on" in last_speech().lower(), last_speech())
+
+        # A plain g must still be a normal key, not the override.
+        app.settings["screen_reader"] = False
+        driver.key("g")
+        check("plain g is not the override", app.settings["screen_reader"] is False)
+
+        app.settings["screen_reader"] = True
+        app._sync_message_panel()
+        check("the question is not asked twice",
+              app.settings["screen_reader"] is not None)
+    finally:
+        app.settings["screen_reader"] = True
+        app._sync_message_panel()
+        release_app(app)
+
+
 def test_settings_menu():
     print("\nsettings menu")
     app = make_app()
@@ -1081,6 +1161,9 @@ def test_settings_menu():
         driver.key("Down")
         check("down reaches opponent strength",
               "opponent strength" in last_speech().lower(), last_speech())
+        check("inverted mode is still the first entry",
+              helm_settings_first_label() == "Inverted mode",
+              helm_settings_first_label())
         level_before = app.settings["level"]
         driver.key("Right")
         check("right raises the level", app.settings["level"] == level_before + 1)
@@ -1182,6 +1265,7 @@ def main():
     test_updater_folder_replacement()
     test_real_key_delivery()
     test_startup_and_menus()
+    test_first_run_question()
     test_quit_confirmation()
     test_navigation()
     test_selection_and_movement()
