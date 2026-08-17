@@ -1,0 +1,3 @@
+# Helm Chess dependencies. install.py installs these for you.
+chess>=1.10
+accessible_output2>=0.17

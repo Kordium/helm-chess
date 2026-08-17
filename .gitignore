@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.update-backup/
+engines/
+*.pgn
+settings.json
+.venv/
