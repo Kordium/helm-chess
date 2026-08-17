@@ -244,6 +244,11 @@ def make_app(**overrides):
     app = _APP
     app.settings.update(overrides)
     app.board.reset()
+    # Most tests are about playing, so put the app in the state it is in once
+    # a game has been started from the menu.
+    app._menu = None
+    app._in_settings = False
+    app._game_active = True
     app.selected = None
     app.ghost = None
     app.thinking = False
@@ -531,6 +536,88 @@ def test_illegal_moves_are_blocked():
         release_app(app)
 
 
+def test_travelling_through_illegal_squares():
+    """In check, the only legal square is often several squares away.
+
+    Every square on the way there is illegal on its own, because it does not
+    answer the check. The piece has to be able to travel over them, or the
+    move cannot be played at all. Both positions here came out of the soak
+    test, where these moves were genuinely impossible to make.
+    """
+    print("\ntravelling to a distant legal square")
+    app = make_app()
+    driver = Driver(app)
+    try:
+        # White king d1 is in check from the bishop on f3. The bishop on b5
+        # can block on e2, three squares away, and nothing nearer is legal.
+        driver.setup("r2q1rk1/ppp2ppp/2n2n2/1Bbpp3/7P/P3Pb2/1PPP1PP1/1RBK2NR w - - 0 10",
+                     chess.B5)
+        _spoken.clear()
+        driver.key("Return")
+        check("the bishop can be picked up", app.selected == chess.B5, last_speech())
+
+        mark = len(_spoken)
+        driver.arrows("Down", "Right")
+        check("it travels over c4", app.ghost == chess.C4,
+              chess.square_name(app.ghost) if app.ghost else "none")
+        check("but is told it cannot stop there",
+              "cannot stop here" in all_speech_since(mark).lower(),
+              all_speech_since(mark))
+
+        mark = len(_spoken)
+        driver.key("Return")
+        check("committing on the way is refused", len(app.board.move_stack) == 0)
+        check("and it says to keep going",
+              "keep going" in all_speech_since(mark).lower(), all_speech_since(mark))
+
+        driver.arrows("Down", "Right")
+        check("it travels over d3", app.ghost == chess.D3,
+              chess.square_name(app.ghost) if app.ghost else "none")
+        driver.arrows("Down", "Right")
+        check("it reaches e2", app.ghost == chess.E2,
+              chess.square_name(app.ghost) if app.ghost else "none")
+
+        driver.key("Return")
+        driver.pump(0.2)
+        check("the blocking move is played",
+              app.board.piece_at(chess.E2) is not None
+              and app.board.piece_at(chess.E2).piece_type == chess.BISHOP,
+              str(app.board.piece_at(chess.E2)))
+        check("the check is answered", not app.board.is_check())
+        driver.wait_for_engine()
+
+        # White king e1 is in check from the knight on d3. The bishop on f1
+        # takes it, two squares away, and e2 on the way is illegal.
+        driver.setup("r2q1rk1/pbp2ppp/3b4/4p2P/2P1p3/3n2P1/3P1P1N/3QKB1R w K - 1 14",
+                     chess.F1)
+        driver.key("Return")
+        driver.arrows("Up", "Left")
+        check("it travels over e2", app.ghost == chess.E2,
+              chess.square_name(app.ghost) if app.ghost else "none")
+        driver.arrows("Up", "Left")
+        check("it reaches the knight on d3", app.ghost == chess.D3,
+              chess.square_name(app.ghost) if app.ghost else "none")
+        driver.key("Return")
+        driver.pump(0.2)
+        check("the checking knight is captured",
+              app.board.piece_at(chess.D3) is not None
+              and app.board.piece_at(chess.D3).piece_type == chess.BISHOP)
+        driver.wait_for_engine()
+
+        # A square with nothing legal beyond it must still be refused outright.
+        driver.setup("4k2r/8/8/8/8/8/8/4KB2 w - - 0 1", chess.F1)
+        driver.key("Return")
+        mark = len(_spoken)
+        driver.arrows("Up")
+        check("a bishop still cannot go straight up", app.ghost == chess.F1,
+              chess.square_name(app.ghost) if app.ghost else "none")
+        check("and that is refused, not travelled",
+              "cannot stop here" not in all_speech_since(mark).lower(),
+              all_speech_since(mark))
+    finally:
+        release_app(app)
+
+
 def test_promotion():
     print("\npromotion")
     app = make_app()
@@ -768,6 +855,137 @@ def test_updater_folder_replacement():
           sound_files(install) == untouched, str(sound_files(install)))
 
 
+def test_startup_and_menus():
+    print("\nstartup and menus")
+    app = make_app()
+    driver = Driver(app)
+    try:
+        # Back to how the program actually opens: menu first, no game.
+        app._game_active = False
+        app.board.reset()
+        _spoken.clear()
+        app._open_at_start()
+        opening = all_speech_since(0).lower()
+
+        check("it names itself and the version", "helm chess version" in opening, opening)
+        check("it opens on the main menu", app._menu is not None)
+        check("the main menu is announced", "main menu" in opening, opening)
+        check("start game is the first option", "start game" in opening, opening)
+        check("it does not announce a square",
+              "white king" not in opening and "e1," not in opening, opening)
+        check("no game is running yet", not app._game_active)
+
+        labels = [item["label"] for item in app._menu["items"]]
+        check("the three options are in order",
+              labels[0] == "Start game" and labels[1] == "Settings"
+              and labels[2].startswith("Exit"), str(labels))
+
+        # Board keys must do nothing before a game exists.
+        cursor_before = app.cursor
+        driver.key("c")
+        check("board keys do not act before a game starts",
+              app.cursor == cursor_before and app._menu is not None)
+
+        # Start game leads to the difficulty list.
+        driver.key("Return")
+        said = last_speech().lower()
+        check("start game asks for a difficulty", "difficulty" in said, said)
+        check("the difficulty list has eight levels", len(app._menu["items"]) == 8)
+        check("each level explains itself",
+              all(item.get("description") for item in app._menu["items"]))
+        check("it starts on the level you last used",
+              app._menu["index"] == app.settings["level"] - 1,
+              "%d vs %d" % (app._menu["index"], app.settings["level"]))
+
+        # Escape backs out to the main menu rather than doing nothing.
+        driver.key("Escape")
+        check("escape goes back to the main menu",
+              app._menu is not None and app._menu["title"] == "Main menu",
+              app._menu["title"] if app._menu else "none")
+
+        # Pick level 5 and confirm the game actually begins.
+        driver.key("Return")
+        driver.key("Home")
+        for _ in range(4):
+            driver.key("Down")
+        check("we are on level 5", app._menu["items"][app._menu["index"]]["label"]
+              == "Level 5")
+        driver.key("Return")
+        driver.pump(0.2)
+        check("choosing a level starts the game", app._game_active)
+        check("the menu closes", app._menu is None)
+        check("the difficulty is applied", app.opponent.level == 5,
+              str(app.opponent.level))
+        check("it says the game has begun", "new game" in last_speech().lower(),
+              last_speech())
+        check("the board is set up", app.board.fen() == chess.Board().fen())
+
+        # Now the board keys work again.
+        app.cursor = chess.E2
+        driver.arrows("Up")
+        check("arrows drive the board once a game is on", app.cursor == chess.E3,
+              chess.square_name(app.cursor))
+
+        app.opponent.set_level(1)
+        app.settings["level"] = 1
+    finally:
+        release_app(app)
+
+
+def test_quit_confirmation():
+    print("\nquit confirmation")
+    app = make_app()
+    driver = Driver(app)
+    try:
+        app._menu = None
+        app._game_active = True
+        _spoken.clear()
+
+        # Shift and escape, from the board.
+        driver.key("Escape", state=1)
+        said = last_speech().lower()
+        check("shift escape asks first", app._menu is not None)
+        check("it asks whether you mean it", "really want to close" in said, said)
+
+        labels = [item["label"] for item in app._menu["items"]]
+        check("the safe answer comes first", labels[0].startswith("No"), str(labels))
+        check("yes is the second option", labels[1].startswith("Yes"), str(labels))
+        check("it does not close on its own", app.winfo_exists())
+
+        # No takes you back to the game.
+        driver.key("Return")
+        check("no returns to the game", app._menu is None)
+        check("the game is still on", app._game_active)
+        check("it says so", "back to the game" in last_speech().lower(), last_speech())
+
+        # Escape out of the question means the same as no.
+        driver.key("Escape", state=1)
+        check("the question is back", app._menu is not None)
+        driver.key("Escape")
+        check("escape means no", app._menu is None and app.winfo_exists())
+
+        # Plain escape during a game must still just put a piece back.
+        app.cursor = chess.E2
+        driver.key("Return")
+        check("a piece is held", app.selected == chess.E2)
+        driver.key("Escape")
+        check("plain escape does not ask to quit", app._menu is None)
+        check("plain escape releases the piece", app.selected is None)
+
+        # And the exit entry on the main menu asks the same question.
+        app.open_main_menu()
+        driver.key("End")
+        driver.key("Return")
+        check("exit from the main menu asks too",
+              app._menu is not None and "really want to close" in app._menu["title"].lower(),
+              app._menu["title"] if app._menu else "none")
+        driver.key("Escape")
+    finally:
+        app._menu = None
+        app._game_active = True
+        release_app(app)
+
+
 def test_settings_menu():
     print("\nsettings menu")
     app = make_app()
@@ -892,10 +1110,13 @@ def main():
     test_updater()
     test_updater_folder_replacement()
     test_real_key_delivery()
+    test_startup_and_menus()
+    test_quit_confirmation()
     test_navigation()
     test_selection_and_movement()
     test_knight_chords()
     test_illegal_moves_are_blocked()
+    test_travelling_through_illegal_squares()
     test_promotion()
     test_shift_preview()
     test_extras()

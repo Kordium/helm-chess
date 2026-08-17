@@ -46,6 +46,11 @@ ARROWS = {
 }
 ARROW_WORDS = {(0, 1): "up", (0, -1): "down", (-1, 0): "left", (1, 0): "right"}
 
+
+def _unit(value):
+    """-1, 0 or 1, for turning a distance into a direction."""
+    return (value > 0) - (value < 0)
+
 PROMOTION_KEYS = {
     "q": chess.QUEEN,
     "r": chess.ROOK,
@@ -63,6 +68,18 @@ DEFAULT_SETTINGS = {
     "stockfish_path": "",
     "check_updates_on_start": True,
     "sounds": True,
+}
+
+# What each difficulty actually feels like to play against.
+DIFFICULTY_NOTES = {
+    1: "Barely looks ahead. Good for learning where the pieces go.",
+    2: "Sees one move ahead. It will take a piece you leave hanging.",
+    3: "Punishes obvious mistakes. A fair place to start.",
+    4: "Thinks a move or so deeper. Answers back quickly.",
+    5: "Plays a real game. You will have to think.",
+    6: "Takes a couple of seconds a move and rarely blunders.",
+    7: "Tough. Takes up to five seconds a move.",
+    8: "The hardest. Takes up to eight seconds a move.",
 }
 
 # The settings menu, in the order you hear them.
@@ -194,6 +211,12 @@ class HelmChess(tk.Tk):
         self._jump_buffer = None
         self._in_settings = False
         self._settings_index = 0
+        self._settings_return = "board"
+
+        # No game exists until you start one from the menu, so the board keys
+        # do nothing and the arrows belong to whichever menu is open.
+        self._menu = None
+        self._game_active = False
 
         # Chord tracking. `_held` stops key auto-repeat from firing a chord
         # over and over; `_chord` is what actually gets resolved.
@@ -218,7 +241,7 @@ class HelmChess(tk.Tk):
         self.bind("<FocusOut>", self._on_focus_out)
         self.protocol("WM_DELETE_WINDOW", self.quit_app)
 
-        self._timers = [self.after(300, self._greet)]
+        self._timers = [self.after(300, self._open_at_start)]
         if settings["check_updates_on_start"]:
             self._timers.append(
                 self.after(1500, lambda: self.check_updates(quiet=True)))
@@ -235,6 +258,15 @@ class HelmChess(tk.Tk):
         self._refresh()
 
     def _refresh(self):
+        if self._menu is not None:
+            lines = [self._menu["title"], ""]
+            for index, item in enumerate(self._menu["items"]):
+                marker = ">" if index == self._menu["index"] else " "
+                lines.append("%s %s" % (marker, item["label"]))
+            self.display.config(text="\n".join(lines))
+            self.status.config(text="Up and down to move, enter to choose")
+            return
+
         self.display.config(text=describe.render_board(
             self.board, self.cursor, self.selected, self.ghost,
         ))
@@ -242,14 +274,10 @@ class HelmChess(tk.Tk):
             describe.describe_status(self.board), self.opponent.describe(),
         ))
 
-    def _greet(self):
-        self.say(
-            "%s version %s. %s. You play %s. %s. "
-            "Arrow keys to explore, enter to pick up a piece, F1 for help."
-            % (APP_NAME, __version__, self.opponent.describe(),
-               describe.COLOR_NAMES[self.human_color],
-               describe.describe_square(self.board, self.cursor, self._phonetic()))
-        )
+    def _open_at_start(self):
+        """What you hear when the program opens: the menu, not a board."""
+        self.say("%s version %s." % (APP_NAME, __version__))
+        self.open_main_menu(announce_title=True)
 
     # -- helpers -----------------------------------------------------------
 
@@ -287,9 +315,22 @@ class HelmChess(tk.Tk):
     def _on_key_press(self, event):
         keysym = event.keysym
 
-        # The settings menu takes the arrows plainly, with no chording.
+        # Menus take the arrows plainly, with no chording.
+        if self._menu is not None:
+            self._menu_key(event)
+            return "break"
         if self._in_settings:
             self._settings_key(event)
+            return "break"
+
+        # Shift and escape asks to close, from anywhere in the game.
+        if keysym == "Escape" and (event.state & 0x0001):
+            self.confirm_quit()
+            return "break"
+
+        # With no game running there is nothing to drive, so go back to the menu.
+        if not self._game_active:
+            self.open_main_menu()
             return "break"
 
         if keysym in ARROWS:
@@ -390,12 +431,44 @@ class HelmChess(tk.Tk):
 
         move = self._legal_move(self.selected, target)
         if move is None:
+            # The square itself is no good, but a legal one may lie further
+            # along the same line. That happens constantly when you are in
+            # check: a bishop's only legal move is the square that blocks it,
+            # and every square on the way there is illegal on its own. Refusing
+            # the step would make that move impossible to play at all, so the
+            # piece travels on and is simply not allowed to stop here.
+            if self._leads_onward(target):
+                self.ghost = target
+                self._refresh()
+                self.say("%s, cannot stop here" % describe.describe_square(
+                    self.board, target, self._phonetic()))
+                return
             self.refuse(self._why_not(target, piece))
             return
 
         self.ghost = target
         self._refresh()
         self.say(describe.describe_destination(self.board, move, self._phonetic()))
+
+    def _leads_onward(self, square):
+        """Is there a legal destination further along the line through `square`?"""
+        origin_file = chess.square_file(self.selected)
+        origin_rank = chess.square_rank(self.selected)
+        toward_file = chess.square_file(square) - origin_file
+        toward_rank = chess.square_rank(square) - origin_rank
+        reached = max(abs(toward_file), abs(toward_rank))
+        heading = (_unit(toward_file), _unit(toward_rank))
+
+        for move in self.board.legal_moves:
+            if move.from_square != self.selected:
+                continue
+            delta_file = chess.square_file(move.to_square) - origin_file
+            delta_rank = chess.square_rank(move.to_square) - origin_rank
+            if max(abs(delta_file), abs(delta_rank)) <= reached:
+                continue
+            if (_unit(delta_file), _unit(delta_rank)) == heading:
+                return True
+        return False
 
     def _steer_knight(self, vector):
         """A knight cannot be walked, so a diagonal chord picks its L instead."""
@@ -588,7 +661,11 @@ class HelmChess(tk.Tk):
 
         move = self._legal_move(self.selected, self.ghost)
         if move is None:
-            self.refuse("That is not a legal move.")
+            if self._leads_onward(self.ghost):
+                self.refuse("You cannot stop on %s. Keep going the same way."
+                            % describe.square_name(self.ghost, self._phonetic()))
+            else:
+                self.refuse("That is not a legal move.")
             return
 
         if move.promotion is not None:
@@ -700,7 +777,7 @@ class HelmChess(tk.Tk):
                 "n": self.new_game,
                 "u": lambda: self.check_updates(quiet=False),
                 "s": self.save_game,
-                "q": self.quit_app,
+                "q": self.confirm_quit,
             }
             if key in actions:
                 actions[key]()
@@ -735,7 +812,9 @@ class HelmChess(tk.Tk):
         elif key == "f":
             self.say(self.board.fen())
         elif key == "o" or keysym == "F2":
-            self.open_settings()
+            self.open_settings(return_to="board")
+        elif keysym == "F10":
+            self.open_main_menu()
         elif key == "j":
             self._jump_buffer = ""
             self.say("Jump to. Type a file letter then a rank number.")
@@ -859,17 +938,8 @@ class HelmChess(tk.Tk):
         self.say(self.opponent.describe())
 
     def new_game(self):
-        self.board.reset()
-        self.selected = None
-        self.ghost = None
-        # A colour chosen in settings mid-game starts applying now.
-        self.human_color = (chess.BLACK if self.settings["play_as"] == "black"
-                            else chess.WHITE)
-        self.cursor = chess.E1 if self.human_color == chess.WHITE else chess.E8
-        self._refresh()
-        self.say("New game. You play %s." % describe.COLOR_NAMES[self.human_color])
-        if self.human_color == chess.BLACK:
-            self.after(300, self._start_thinking)
+        """Control N: straight into another game at the difficulty you are on."""
+        self.start_game(self.settings["level"])
 
     def save_game(self):
         game = chess.pgn.Game.from_board(self.board)
@@ -887,13 +957,171 @@ class HelmChess(tk.Tk):
         except OSError as exc:
             self.refuse("Could not save: %s" % exc)
 
+    # -- menus -------------------------------------------------------------
+
+    def _open_menu(self, title, items, escape=None, index=0, announce_title=True):
+        """Show a spoken list. Up and down to walk it, enter to choose.
+
+        `escape` is what the escape key does; leaving it out means escape
+        just reads the current entry again, which is what you want on a menu
+        there is no sensible way to back out of.
+        """
+        self._menu = {"title": title, "items": items, "escape": escape,
+                      "index": max(0, min(index, len(items) - 1))}
+        self.selected = None
+        self.ghost = None
+        self._knight_pending = {}
+        self._refresh()
+        item = items[self._menu["index"]]
+        if announce_title:
+            self.say("%s. %s. %s. Up and down to move, enter to choose."
+                     % (title, item["label"], item.get("description", "")))
+        else:
+            self.say("%s. %s" % (item["label"], item.get("description", "")))
+
+    def _close_menu(self):
+        self._menu = None
+        self._refresh()
+
+    def _announce_menu_item(self):
+        item = self._menu["items"][self._menu["index"]]
+        self.say("%s. %s" % (item["label"], item.get("description", "")))
+
+    def _menu_key(self, event):
+        keysym = event.keysym
+        menu = self._menu
+        count = len(menu["items"])
+
+        if keysym in ("Up", "Left"):
+            menu["index"] = (menu["index"] - 1) % count
+            self._refresh()
+            self._announce_menu_item()
+        elif keysym in ("Down", "Right"):
+            menu["index"] = (menu["index"] + 1) % count
+            self._refresh()
+            self._announce_menu_item()
+        elif keysym == "Home":
+            menu["index"] = 0
+            self._refresh()
+            self._announce_menu_item()
+        elif keysym == "End":
+            menu["index"] = count - 1
+            self._refresh()
+            self._announce_menu_item()
+        elif keysym in ("Return", "KP_Enter", "space"):
+            menu["items"][menu["index"]]["action"]()
+        elif keysym == "Escape":
+            if menu["escape"] is not None:
+                menu["escape"]()
+            else:
+                self.say("%s. %s" % (menu["title"], self._menu_item_labels()))
+        elif keysym in ("F1", "question", "slash"):
+            self.say("%s. %s. Up and down to move, enter to choose, "
+                     "escape to go back." % (menu["title"], self._menu_item_labels()))
+        else:
+            self._announce_menu_item()
+
+    def _menu_item_labels(self):
+        return ", ".join(item["label"] for item in self._menu["items"])
+
+    def _leave_menu(self):
+        """Back out of a menu: to the board if a game is on, else the main menu."""
+        if self._game_active:
+            self._close_menu()
+            self.say("Back to the game. %s" % describe.describe_status(self.board))
+        else:
+            self.open_main_menu()
+
+    # -- the menus themselves ----------------------------------------------
+
+    def open_main_menu(self, announce_title=True):
+        items = [
+            {
+                "label": "Start game",
+                "description": "Pick a difficulty and begin a new game.",
+                "action": self.open_difficulty_menu,
+            },
+            {
+                "label": "Settings",
+                "description": "Inverted mode, phonetic squares, diagonal timing and more.",
+                "action": lambda: self.open_settings(return_to="main"),
+            },
+            {
+                "label": "Exit",
+                "description": "Close %s." % APP_NAME,
+                "action": self.confirm_quit,
+            },
+        ]
+        self._open_menu("Main menu", items, escape=self._main_menu_escape,
+                        announce_title=announce_title)
+
+    def _main_menu_escape(self):
+        if self._game_active:
+            self._close_menu()
+            self.say("Back to the game. %s" % describe.describe_status(self.board))
+        else:
+            self.say("Main menu. Choose start game, settings, or exit.")
+
+    def open_difficulty_menu(self):
+        items = []
+        for level in range(1, 9):
+            items.append({
+                "label": "Level %d" % level,
+                "description": DIFFICULTY_NOTES[level],
+                "action": (lambda chosen: lambda: self.start_game(chosen))(level),
+            })
+        self._open_menu("Choose a difficulty", items,
+                        escape=lambda: self.open_main_menu(),
+                        index=self.settings["level"] - 1)
+
+    def confirm_quit(self):
+        """Shift and escape, or exit from the menu. Safe answer comes first."""
+        items = [
+            {
+                "label": "No, keep %s open" % APP_NAME,
+                "description": "Go back to what you were doing.",
+                "action": self._leave_menu,
+            },
+            {
+                "label": "Yes, close %s" % APP_NAME,
+                "description": "The program will close now.",
+                "action": self.quit_app,
+            },
+        ]
+        self._open_menu("Do you really want to close %s?" % APP_NAME, items,
+                        escape=self._leave_menu)
+
+    def start_game(self, level):
+        self.settings["level"] = level
+        self.opponent.set_level(level)
+        save_settings(self.settings)
+
+        self.board.reset()
+        self.human_color = (chess.BLACK if self.settings["play_as"] == "black"
+                            else chess.WHITE)
+        self.cursor = chess.E1 if self.human_color == chess.WHITE else chess.E8
+        self.selected = None
+        self.ghost = None
+        self._game_active = True
+        self._close_menu()
+
+        self.say("New game. You play %s against %s. "
+                 "Arrow keys to explore the board, enter to pick a piece up, "
+                 "F1 for help, shift and escape to close."
+                 % (describe.COLOR_NAMES[self.human_color],
+                    self.opponent.describe()))
+        if self.human_color == chess.BLACK:
+            self.after(600, self._start_thinking)
+
     # -- settings menu -----------------------------------------------------
 
-    def open_settings(self):
+    def open_settings(self, return_to="board"):
         """A spoken list you walk with the arrows. No mouse, no dialog boxes."""
         if self.thinking:
             self.refuse("Wait for the opponent to finish.")
             return
+        self._settings_return = return_to
+        self._close_menu()
         self._in_settings = True
         self._settings_index = 0
         self.selected = None
@@ -906,6 +1134,9 @@ class HelmChess(tk.Tk):
     def close_settings(self):
         self._in_settings = False
         save_settings(self.settings)
+        if self._settings_return == "main":
+            self.open_main_menu()
+            return
         self._refresh()
         self.say("Settings closed. %s" % describe.describe_status(self.board))
 
@@ -1111,10 +1342,11 @@ HELP_TEXT = (
     "L repeats the last move. M reads the whole game. F gives the position code. "
     "J jumps to a square you type. K jumps to your king. "
     "H asks for a hint. U takes back your last move. "
-    "O opens the settings menu. "
+    "O opens the settings menu. F10 opens the main menu. "
     "Plus and minus change the opponent's strength. "
     "Control N starts a new game. Control S saves the game. "
-    "Control U checks for updates. Control Q quits."
+    "Control U checks for updates. "
+    "Shift and escape asks whether you want to close the program."
 )
 
 
@@ -1138,9 +1370,8 @@ def main():
     if args.no_stockfish:
         settings["prefer_stockfish"] = False
 
+    # The game opens on the main menu; nothing is played until you choose to.
     app = HelmChess(settings)
-    if app.human_color == chess.BLACK:
-        app.after(1200, app._start_thinking)
     app.mainloop()
 
 

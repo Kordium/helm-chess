@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.5
+
+- The game now opens on a **main menu**: start game, settings, exit. Start
+  game asks which difficulty first, with each level described, and the game
+  begins once you pick one.
+- **Shift and escape** asks whether you really want to close the program.
+  The safe answer comes first, so enter keeps the game open. Plain escape
+  still just puts down a piece. **F10** reopens the main menu.
+- Fixed the opening announcement, which used to read out a square and a
+  piece as though you had selected the king.
+- Fixed a bug that could make a legal move impossible to play. When you are
+  in check, a bishop or rook often has one legal square several squares
+  away, and every square on the route is illegal on its own. The piece now
+  travels over them, announced as "cannot stop here", instead of the step
+  being refused and the move being unreachable.
+
 ## 1.0.4
 
 - The `sounds` folder is now replaced wholesale on update rather than merged

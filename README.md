@@ -36,8 +36,21 @@ Start it from the desktop shortcut, or with:
 python helm_chess.py
 ```
 
-Useful switches: `--black` to play black, `--level 5` to set the opponent's
-strength, `--no-stockfish` to always use the built-in engine.
+It opens on the **main menu**, not on a board. Up and down walk the list,
+enter chooses:
+
+1. **Start game** — asks which difficulty, 1 to 8, each one described. Pick
+   one and the game begins.
+2. **Settings** — see below.
+3. **Exit** — asks whether you are sure first.
+
+While playing, **shift and escape** asks whether you want to close the
+program. The safe answer comes first, so pressing enter straight away keeps
+the game open. Plain escape on its own still just puts down a piece you are
+holding. **F10** reopens the main menu at any time.
+
+Useful switches: `--black` to play black, `--level 5` to preselect the
+opponent's strength, `--no-stockfish` to always use the built-in engine.
 
 ## The keys
 
@@ -66,6 +79,12 @@ direction needs two dimensions, it needs two keys.
 Anything illegal is refused with a reason: "blocked by your own pawn",
 "that would leave your king in check", "a bishop cannot move to e5".
 
+Sometimes a piece has to travel over squares it is not allowed to stop on.
+When you are in check, a bishop's only legal move might be the square three
+along that blocks it, and every square on the way is illegal by itself. Those
+are announced as "c4, empty, cannot stop here" and you simply keep going. If
+you try to commit there it says so rather than just refusing.
+
 Castling needs no special key. Pick up the king and walk it two squares
 towards the rook; it is announced as castling before you commit.
 
@@ -89,10 +108,11 @@ Promotion asks which piece: **q**, **r**, **b**, or **n**.
 - **H** asks the engine for a hint.
 - **U** takes back your last move and the reply, so a blunder becomes a
   lesson instead of a lost game.
-- **O** opens the settings menu.
+- **O** opens the settings menu. **F10** opens the main menu.
 - **Plus** and **minus** change the opponent's strength, 1 to 8.
-- **Control N** starts a new game. **Control S** saves the game to a PGN
-  file. **Control U** checks for updates. **Control Q** quits.
+- **Control N** starts a new game at the difficulty you are on. **Control S**
+  saves the game to a PGN file. **Control U** checks for updates.
+- **Shift and escape** asks whether you want to close the program.
 
 ## The opponent
 
