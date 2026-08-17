@@ -4,7 +4,7 @@ The updater parses this file straight from GitHub, so keep the assignment
 on one line and in this exact shape.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 GITHUB_OWNER = "Kordium"
 GITHUB_REPO = "project-golem"

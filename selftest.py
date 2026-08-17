@@ -197,9 +197,9 @@ class Driver:
         self.app.update()
 
     def wait_for_engine(self, timeout=20.0):
-        # The reply is scheduled on a short timer, so give it a chance to
-        # start before deciding that nothing is happening.
-        self.pump(0.4)
+        # The reply waits out the deliberate pause first, so give it at least
+        # that long before deciding nothing is happening.
+        self.pump(self.app.settings.get("reply_delay_ms", 1000) / 1000.0 + 0.4)
         deadline = time.monotonic() + timeout
         while self.app.thinking and time.monotonic() < deadline:
             self.pump(0.05)
@@ -236,6 +236,7 @@ def make_app(**overrides):
             "prefer_stockfish": False,
             "sounds": False,
             "chord_ms": 60,
+            "reply_delay_ms": 120,   # keep the suite quick; the real gap is 1s
         })
         _APP = project_golem.ProjectGolem(settings)
         _APP.withdraw()     # no window flashing up during the test
@@ -578,11 +579,12 @@ def test_travelling_through_illegal_squares():
               chess.square_name(app.ghost) if app.ghost else "none")
 
         driver.key("Return")
-        driver.pump(0.2)
+        driver.pump(0.05)
+        # Check what was played, not what is still standing: once the
+        # opponent replies it may well have taken the piece back.
         check("the blocking move is played",
-              app.board.piece_at(chess.E2) is not None
-              and app.board.piece_at(chess.E2).piece_type == chess.BISHOP,
-              str(app.board.piece_at(chess.E2)))
+              app.board.move_stack and app.board.move_stack[-1].uci() == "b5e2",
+              app.board.move_stack[-1].uci() if app.board.move_stack else "nothing")
         check("the check is answered", not app.board.is_check())
         driver.wait_for_engine()
 
@@ -598,10 +600,11 @@ def test_travelling_through_illegal_squares():
         check("it reaches the knight on d3", app.ghost == chess.D3,
               chess.square_name(app.ghost) if app.ghost else "none")
         driver.key("Return")
-        driver.pump(0.2)
+        driver.pump(0.05)
         check("the checking knight is captured",
-              app.board.piece_at(chess.D3) is not None
-              and app.board.piece_at(chess.D3).piece_type == chess.BISHOP)
+              app.board.move_stack and app.board.move_stack[-1].uci() == "f1d3",
+              app.board.move_stack[-1].uci() if app.board.move_stack else "nothing")
+        check("the check is answered", not app.board.is_check())
         driver.wait_for_engine()
 
         # A square with nothing legal beyond it must still be refused outright.
@@ -986,6 +989,74 @@ def test_quit_confirmation():
         release_app(app)
 
 
+def test_reply_pause_and_focus():
+    """The opponent waits before answering, and does not steal your place."""
+    print("\npause before the reply, and where the cursor stays")
+    app = make_app()
+    driver = Driver(app)
+    try:
+        app.settings["reply_delay_ms"] = 400
+        driver.setup(chess.Board().fen(), chess.E2)
+        _spoken.clear()
+
+        driver.key("Return")
+        driver.arrows("Up")
+        driver.arrows("Up")
+        driver.key("Return")
+
+        # Your move is in, but the opponent must not have started yet.
+        check("your move is played", len(app.board.move_stack) == 1,
+              str(len(app.board.move_stack)))
+        check("the opponent has not begun", not app.thinking)
+        driver.pump(0.15)
+        check("still quiet a moment later", len(app.board.move_stack) == 1,
+              str(len(app.board.move_stack)))
+        check("your move is the last thing said",
+              "pawn e2 to e4" in all_speech_since(0).lower(), last_speech())
+
+        # Park the cursor somewhere of your own choosing.
+        app.cursor = chess.A1
+        driver.wait_for_engine()
+        check("the opponent answered", len(app.board.move_stack) == 2,
+              str(len(app.board.move_stack)))
+        check("the cursor was left where you put it", app.cursor == chess.A1,
+              chess.square_name(app.cursor))
+
+        # F3 repeats the move you just heard, so nothing is lost by not moving.
+        mark = len(_spoken)
+        driver.key("F3")
+        said = all_speech_since(mark).lower()
+        check("F3 repeats the last move", "last move" in said, said)
+        reply = app.board.move_stack[-1]
+        check("and it is the opponent's move",
+              chess.square_name(reply.to_square) in said, said)
+
+        mark = len(_spoken)
+        driver.key("l")
+        check("L still does the same too",
+              "last move" in all_speech_since(mark).lower(), all_speech_since(mark))
+
+        # Taking back during the pause must not let a stale reply through.
+        app.settings["reply_delay_ms"] = 3000
+        driver.setup(chess.Board().fen(), chess.E2)
+        driver.key("Return")
+        driver.arrows("Up")
+        driver.arrows("Up")
+        driver.key("Return")
+        check("one move on the board", len(app.board.move_stack) == 1)
+        driver.key("u")
+        check("the takeback worked", len(app.board.move_stack) == 0)
+        driver.pump(0.6)
+        check("no reply arrives after the takeback",
+              len(app.board.move_stack) == 0 and not app.thinking,
+              str(len(app.board.move_stack)))
+
+        app.settings["reply_delay_ms"] = 120
+    finally:
+        app._cancel_reply()
+        release_app(app)
+
+
 def test_settings_menu():
     print("\nsettings menu")
     app = make_app()
@@ -1120,6 +1191,7 @@ def main():
     test_promotion()
     test_shift_preview()
     test_extras()
+    test_reply_pause_and_focus()
     test_black_orientation()
     test_settings_menu()
     test_inverted_mode()

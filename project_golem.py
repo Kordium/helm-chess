@@ -61,6 +61,7 @@ PROMOTION_KEYS = {
 
 DEFAULT_SETTINGS = {
     "chord_ms": 90,          # how long to wait for a second arrow
+    "reply_delay_ms": 1000,  # quiet gap before the opponent answers
     "level": 3,              # opponent strength, 1 to 8
     "play_as": "white",
     "phonetic_files": False,  # say "echo 4" instead of "e4"
@@ -131,6 +132,17 @@ SETTINGS_ITEMS = [
             "How long the game waits for a second arrow key before deciding "
             "you meant a single direction. Raise it if diagonals are not "
             "registering, lower it if single presses feel slow."
+        ),
+    },
+    {
+        "key": "reply_delay_ms",
+        "label": "Pause before the reply",
+        "kind": "number",
+        "low": 0, "high": 3000, "step": 250, "unit": "milliseconds",
+        "description": (
+            "How long the opponent waits before answering your move, so its "
+            "move is not announced over the top of yours. Raise it if the two "
+            "still run together, lower it if the wait feels slow."
         ),
     },
     {
@@ -240,6 +252,7 @@ class ProjectGolem(tk.Tk):
         # do nothing and the arrows belong to whichever menu is open.
         self._menu = None
         self._game_active = False
+        self._reply_timer = None
 
         # Chord tracking. `_held` stops key auto-repeat from firing a chord
         # over and over; `_chord` is what actually gets resolved.
@@ -720,7 +733,25 @@ class ProjectGolem(tk.Tk):
             self.say("%s. %s" % (text, describe.describe_status(self.board)))
             return
         self.say(text)
-        self.after(150, self._start_thinking)
+        self._schedule_reply()
+
+    def _schedule_reply(self):
+        """Wait before the opponent answers.
+
+        Without this its move is announced over the top of yours and the two
+        run together into one stream you cannot pick apart.
+        """
+        self._cancel_reply()
+        self._reply_timer = self.after(
+            max(0, int(self.settings["reply_delay_ms"])), self._start_thinking)
+
+    def _cancel_reply(self):
+        if self._reply_timer is not None:
+            try:
+                self.after_cancel(self._reply_timer)
+            except Exception:
+                pass
+            self._reply_timer = None
 
     # -- the opponent ------------------------------------------------------
 
@@ -767,7 +798,9 @@ class ProjectGolem(tk.Tk):
 
         text = describe.describe_move(self.board, move, self._phonetic())
         self.board.push(move)
-        self.cursor = move.to_square
+        # The cursor deliberately stays where you left it. Being yanked across
+        # the board every time the opponent moves loses your place. F3 or L
+        # repeat the move, and K jumps to your king if you are in check.
         self._refresh()
         if self.board.is_game_over(claim_draw=True):
             self.say("%s. %s" % (text, describe.describe_status(self.board)))
@@ -828,7 +861,7 @@ class ProjectGolem(tk.Tk):
             self.say(describe.list_pieces(self.board, chess.WHITE, self._phonetic()))
         elif key == "b":
             self.say(describe.list_pieces(self.board, chess.BLACK, self._phonetic()))
-        elif key == "l":
+        elif key == "l" or keysym == "F3":
             self._say_last_move()
         elif key == "m":
             self.say(describe.move_history(self.board, self._phonetic()))
@@ -944,6 +977,7 @@ class ProjectGolem(tk.Tk):
         if not self.board.move_stack:
             self.refuse("Nothing to take back.")
             return
+        self._cancel_reply()    # a reply waiting on the pause is now moot
         self.board.pop()
         if self.board.move_stack and self.board.turn != self.human_color:
             self.board.pop()
@@ -1119,6 +1153,7 @@ class ProjectGolem(tk.Tk):
         self.opponent.set_level(level)
         save_settings(self.settings)
 
+        self._cancel_reply()
         self.board.reset()
         self.human_color = (chess.BLACK if self.settings["play_as"] == "black"
                             else chess.WHITE)
@@ -1134,7 +1169,7 @@ class ProjectGolem(tk.Tk):
                  % (describe.COLOR_NAMES[self.human_color],
                     self.opponent.describe()))
         if self.human_color == chess.BLACK:
-            self.after(600, self._start_thinking)
+            self._schedule_reply()
 
     # -- settings menu -----------------------------------------------------
 
@@ -1337,6 +1372,7 @@ class ProjectGolem(tk.Tk):
     # -- shutdown ----------------------------------------------------------
 
     def quit_app(self):
+        self._cancel_reply()
         for timer in self._timers:
             try:
                 self.after_cancel(timer)
@@ -1362,7 +1398,8 @@ HELP_TEXT = (
     "Shift with the arrows says what lies that way without moving. "
     "C says the current square. S says whose move it is. "
     "W and B read the white and black pieces. V gives the material count. "
-    "L repeats the last move. M reads the whole game. F gives the position code. "
+    "L or F3 repeats the last move. M reads the whole game. "
+    "F gives the position code. "
     "J jumps to a square you type. K jumps to your king. "
     "H asks for a hint. U takes back your last move. "
     "O opens the settings menu. F10 opens the main menu. "

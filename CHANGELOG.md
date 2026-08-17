@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+- The opponent now waits a second before answering, so its move is no longer
+  announced over the top of yours and you can tell the two apart. Adjustable
+  in settings as **Pause before the reply**.
+- The cursor stays where you put it when the opponent moves, instead of
+  being dragged to whatever piece it just played.
+- **F3** repeats the last move played, the same as **L**.
+- A reply still waiting out the pause is dropped if you take the move back
+  or start a new game in the meantime.
+
 ## 1.1.0
 
 - Renamed to **Project Golem**. A golem does exactly what it is told and

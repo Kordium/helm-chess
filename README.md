@@ -102,7 +102,7 @@ Promotion asks which piece: **q**, **r**, **b**, or **n**.
 - **S** says whose move it is, and whether anyone is in check.
 - **W** and **B** read out all the white or black pieces and where they are.
 - **V** gives the material count and who is ahead.
-- **L** repeats the last move. **M** reads the whole game so far.
+- **L** or **F3** repeats the last move. **M** reads the whole game so far.
 - **F** gives the position code (FEN), for pasting elsewhere.
 - **J** jumps the cursor to a square you type, like `j` then `c` then `5`.
 - **K** jumps to your king.
@@ -117,6 +117,11 @@ Promotion asks which piece: **q**, **r**, **b**, or **n**.
 - **Control N** starts a new game at the difficulty you are on. **Control S**
   saves the game to a PGN file. **Control U** checks for updates.
 - **Shift and escape** asks whether you want to close the program.
+
+The cursor stays where you put it when the opponent moves. You are not
+dragged across the board every time it plays, so you keep your place. Press
+**F3** or **L** to hear its move again, and **K** to jump to your king if you
+are in check.
 
 ## The opponent
 
@@ -169,6 +174,8 @@ dialog box; it is all spoken.
 - **Diagonal timing**. How long the game waits for a second arrow key before
   deciding you meant a single direction. It starts at 90 milliseconds. Raise
   it if diagonals are not registering, lower it if single presses feel slow.
+- **Pause before the reply**. How long the opponent waits before answering,
+  so its move is not announced over the top of yours. One second by default.
 - **Sound effects**, **Use Stockfish when available**, and **Check for
   updates on start**.
 
