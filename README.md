@@ -1,5 +1,7 @@
 # Helm Chess
 
+**H**ear **E**very **L**egal **M**ove.
+
 A chess client you play entirely from the keyboard, built for screen reader
 users. Instead of typing coordinates, you steer: walk a cursor around the
 board, pick up a piece, and then drive that piece where you want it. If a
