@@ -1,52 +1,38 @@
-Sounds used by Project Golem
-============================================================
+Sound credits
+=============
 
-Every file here is Creative Commons 0 (public domain), taken
-from Freesound. No attribution is legally required, but the
-people who made them deserve the credit anyway.
+Every sound in this folder is Creative Commons 0 (public domain), taken from
+Freesound. Attribution is not legally required, but the people who made them
+deserve the credit.
 
-Each file has been folded to dual mono, trimmed of silence,
-and normalised so they all sit at the same level.
-
-Picking a piece up has no sound yet, on purpose.
-
-capture.ogg  (capture)
+capture.ogg
   "Sword Unsheathe" by SecureSubset
   https://freesound.org/s/788532/
-  http://creativecommons.org/publicdomain/zero/1.0/
 
-castle.ogg  (castle)
+castle.ogg
   "clank.wav" by Empiremonkey
   https://freesound.org/s/616492/
-  http://creativecommons.org/publicdomain/zero/1.0/
 
-check.ogg  (check)
+check.ogg
   "Sword_Clash (57).wav" by JohnBuhr
   https://freesound.org/s/326862/
-  http://creativecommons.org/publicdomain/zero/1.0/
 
-gameover.ogg  (gameover)
+gameover.ogg
   "Axe Slash 1" by smokebomb99
   https://freesound.org/s/147290/
-  http://creativecommons.org/publicdomain/zero/1.0/
 
-move1.ogg  (move)
+move1.ogg
   "Wooden Stick Swing 1_2" by Joao_Janz
   https://freesound.org/s/485277/
-  http://creativecommons.org/publicdomain/zero/1.0/
 
-move2.ogg  (move)
+move2.ogg
   "Woosh 1" by mateusboga
   https://freesound.org/s/614084/
-  http://creativecommons.org/publicdomain/zero/1.0/
 
-promote.ogg  (promote)
+promote.ogg
   "Fast Warp In" by GammaGool
   https://freesound.org/s/735062/
-  http://creativecommons.org/publicdomain/zero/1.0/
 
-refused.ogg  (refused)
+refused.ogg
   "Fruit Impact 1" by OwlStorm
   https://freesound.org/s/209012/
-  http://creativecommons.org/publicdomain/zero/1.0/
-
