@@ -58,12 +58,88 @@ DEFAULT_SETTINGS = {
     "level": 3,              # opponent strength, 1 to 8
     "play_as": "white",
     "phonetic_files": False,  # say "echo 4" instead of "e4"
-    "flip_for_black": True,   # up means forward when you play black
+    "inverted": False,        # see SETTINGS_ITEMS below
     "prefer_stockfish": True,
     "stockfish_path": "",
     "check_updates_on_start": True,
     "sounds": True,
 }
+
+# The settings menu, in the order you hear them.
+SETTINGS_ITEMS = [
+    {
+        "key": "inverted",
+        "label": "Inverted mode",
+        "kind": "toggle",
+        "description": (
+            "When playing as black, should the board face you like a real "
+            "chess board, or should it stay as if you were playing white? "
+            "Note that with this on, you will be playing top down. Off is the "
+            "default, where the board faces you like in a real game."
+        ),
+    },
+    {
+        "key": "level",
+        "label": "Opponent strength",
+        "kind": "number",
+        "low": 1, "high": 8, "step": 1,
+        "description": (
+            "How hard the opponent plays, from 1 to 8. Higher levels think "
+            "for longer rather than playing dirty."
+        ),
+    },
+    {
+        "key": "play_as",
+        "label": "You play",
+        "kind": "choice",
+        "choices": ["white", "black"],
+        "description": "Which colour you take. This applies to the next new game.",
+    },
+    {
+        "key": "phonetic_files",
+        "label": "Phonetic squares",
+        "kind": "toggle",
+        "description": (
+            "Say echo 4 instead of e4. Turn this on if your synthesiser "
+            "mangles single letters next to numbers."
+        ),
+    },
+    {
+        "key": "chord_ms",
+        "label": "Diagonal timing",
+        "kind": "number",
+        "low": 40, "high": 300, "step": 10, "unit": "milliseconds",
+        "description": (
+            "How long the game waits for a second arrow key before deciding "
+            "you meant a single direction. Raise it if diagonals are not "
+            "registering, lower it if single presses feel slow."
+        ),
+    },
+    {
+        "key": "sounds",
+        "label": "Sound effects",
+        "kind": "toggle",
+        "description": "Play a sound when a move is refused.",
+    },
+    {
+        "key": "prefer_stockfish",
+        "label": "Use Stockfish when available",
+        "kind": "toggle",
+        "description": (
+            "Use a Stockfish engine if one is installed. With this off, the "
+            "built-in engine always plays. Takes effect on the next new game."
+        ),
+    },
+    {
+        "key": "check_updates_on_start",
+        "label": "Check for updates on start",
+        "kind": "toggle",
+        "description": (
+            "Look for a new version when the game opens. Nothing is ever "
+            "installed without you saying yes."
+        ),
+    },
+]
 
 
 def settings_path():
@@ -77,9 +153,16 @@ def load_settings():
     values = dict(DEFAULT_SETTINGS)
     try:
         with open(settings_path(), "r", encoding="utf-8") as handle:
-            values.update(json.load(handle))
+            stored = json.load(handle)
     except (OSError, ValueError):
-        pass
+        return values
+
+    # "flip_for_black" was the old name, and it meant the opposite.
+    if "flip_for_black" in stored and "inverted" not in stored:
+        stored["inverted"] = not stored.pop("flip_for_black")
+    stored.pop("flip_for_black", None)
+
+    values.update(stored)
     return values
 
 
@@ -109,6 +192,8 @@ class HelmChess(tk.Tk):
         self._knight_pending = {}
         self._promotion_pending = None
         self._jump_buffer = None
+        self._in_settings = False
+        self._settings_index = 0
 
         # Chord tracking. `_held` stops key auto-repeat from firing a chord
         # over and over; `_chord` is what actually gets resolved.
@@ -184,8 +269,13 @@ class HelmChess(tk.Tk):
         self.say(text)
 
     def _orient(self, vector):
-        """Flip the arrows when you play black, so up is always forward."""
-        if self.human_color == chess.BLACK and self.settings["flip_for_black"]:
+        """Turn a key press into a board direction.
+
+        Normally the board faces you, so playing black means up is towards
+        rank 1. Inverted mode leaves the board as white sees it, and you play
+        top down.
+        """
+        if self.human_color == chess.BLACK and not self.settings["inverted"]:
             return (-vector[0], -vector[1])
         return vector
 
@@ -196,6 +286,11 @@ class HelmChess(tk.Tk):
 
     def _on_key_press(self, event):
         keysym = event.keysym
+
+        # The settings menu takes the arrows plainly, with no chording.
+        if self._in_settings:
+            self._settings_key(event)
+            return "break"
 
         if keysym in ARROWS:
             if keysym in self._held:
@@ -639,6 +734,8 @@ class HelmChess(tk.Tk):
             self.say(describe.move_history(self.board, self._phonetic()))
         elif key == "f":
             self.say(self.board.fen())
+        elif key == "o" or keysym == "F2":
+            self.open_settings()
         elif key == "j":
             self._jump_buffer = ""
             self.say("Jump to. Type a file letter then a rank number.")
@@ -765,6 +862,9 @@ class HelmChess(tk.Tk):
         self.board.reset()
         self.selected = None
         self.ghost = None
+        # A colour chosen in settings mid-game starts applying now.
+        self.human_color = (chess.BLACK if self.settings["play_as"] == "black"
+                            else chess.WHITE)
         self.cursor = chess.E1 if self.human_color == chess.WHITE else chess.E8
         self._refresh()
         self.say("New game. You play %s." % describe.COLOR_NAMES[self.human_color])
@@ -786,6 +886,122 @@ class HelmChess(tk.Tk):
             self.say("Game saved to %s" % path)
         except OSError as exc:
             self.refuse("Could not save: %s" % exc)
+
+    # -- settings menu -----------------------------------------------------
+
+    def open_settings(self):
+        """A spoken list you walk with the arrows. No mouse, no dialog boxes."""
+        if self.thinking:
+            self.refuse("Wait for the opponent to finish.")
+            return
+        self._in_settings = True
+        self._settings_index = 0
+        self.selected = None
+        self.ghost = None
+        self._knight_pending = {}
+        self._refresh()
+        self.say("Settings. Up and down to move, left and right to change, "
+                 "escape to close. %s" % self._describe_setting(full=True))
+
+    def close_settings(self):
+        self._in_settings = False
+        save_settings(self.settings)
+        self._refresh()
+        self.say("Settings closed. %s" % describe.describe_status(self.board))
+
+    def _current_setting(self):
+        return SETTINGS_ITEMS[self._settings_index]
+
+    def _setting_value_text(self, item):
+        value = self.settings.get(item["key"], DEFAULT_SETTINGS.get(item["key"]))
+        if item["kind"] == "toggle":
+            return "on" if value else "off"
+        if item["kind"] == "number":
+            unit = item.get("unit")
+            return "%s %s" % (value, unit) if unit else str(value)
+        return str(value)
+
+    def _describe_setting(self, full=False):
+        item = self._current_setting()
+        text = "%s, %s" % (item["label"], self._setting_value_text(item))
+        if full:
+            text += ". %s" % item["description"]
+        return text
+
+    def _settings_key(self, event):
+        keysym = event.keysym
+        key = keysym.lower()
+
+        if keysym == "Escape":
+            self.close_settings()
+        elif keysym == "Up":
+            self._settings_index = (self._settings_index - 1) % len(SETTINGS_ITEMS)
+            self.say(self._describe_setting(full=True))
+        elif keysym == "Down":
+            self._settings_index = (self._settings_index + 1) % len(SETTINGS_ITEMS)
+            self.say(self._describe_setting(full=True))
+        elif keysym == "Left":
+            self._change_setting(-1)
+        elif keysym == "Right":
+            self._change_setting(+1)
+        elif keysym in ("Return", "KP_Enter", "space"):
+            item = self._current_setting()
+            # Enter toggles, but on a number it just reads the value back.
+            self._change_setting(+1 if item["kind"] != "number" else 0)
+        elif keysym in ("F1", "question", "slash") or key == "d":
+            self.say(self._describe_setting(full=True))
+        elif keysym == "Home":
+            self._settings_index = 0
+            self.say(self._describe_setting(full=True))
+        elif keysym == "End":
+            self._settings_index = len(SETTINGS_ITEMS) - 1
+            self.say(self._describe_setting(full=True))
+        else:
+            self.say("Settings. %s. Escape to close." % self._describe_setting())
+
+    def _change_setting(self, direction):
+        item = self._current_setting()
+        key = item["key"]
+        value = self.settings.get(key, DEFAULT_SETTINGS.get(key))
+
+        if direction == 0:
+            self.say(self._describe_setting())
+            return
+
+        if item["kind"] == "toggle":
+            self.settings[key] = not value
+        elif item["kind"] == "number":
+            step = item.get("step", 1)
+            new = value + direction * step
+            if new < item["low"] or new > item["high"]:
+                self.refuse("%s is already at its %s, %s." % (
+                    item["label"],
+                    "lowest" if direction < 0 else "highest",
+                    self._setting_value_text(item),
+                ))
+                return
+            self.settings[key] = new
+        elif item["kind"] == "choice":
+            choices = item["choices"]
+            index = choices.index(value) if value in choices else 0
+            self.settings[key] = choices[(index + direction) % len(choices)]
+
+        self._apply_setting(key)
+        save_settings(self.settings)
+        self._refresh()
+        self.say(self._describe_setting())
+
+    def _apply_setting(self, key):
+        """Some settings need more than storing to take effect."""
+        if key == "level":
+            self.opponent.set_level(self.settings["level"])
+        elif key == "play_as":
+            # Changing sides mid-game would be nonsense, so it waits.
+            if not self.board.move_stack:
+                self.human_color = (chess.BLACK
+                                    if self.settings["play_as"] == "black"
+                                    else chess.WHITE)
+                self.cursor = chess.E1 if self.human_color == chess.WHITE else chess.E8
 
     # -- updates -----------------------------------------------------------
 
@@ -895,6 +1111,7 @@ HELP_TEXT = (
     "L repeats the last move. M reads the whole game. F gives the position code. "
     "J jumps to a square you type. K jumps to your king. "
     "H asks for a hint. U takes back your last move. "
+    "O opens the settings menu. "
     "Plus and minus change the opponent's strength. "
     "Control N starts a new game. Control S saves the game. "
     "Control U checks for updates. Control Q quits."

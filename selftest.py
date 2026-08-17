@@ -7,6 +7,7 @@ spoken, so running this is silent.
     python selftest.py
 """
 
+import os
 import sys
 import time
 
@@ -665,6 +666,122 @@ def test_black_orientation():
         release_app(app)
 
 
+def test_settings_menu():
+    print("\nsettings menu")
+    app = make_app()
+    driver = Driver(app)
+    try:
+        _spoken.clear()
+        driver.key("o")
+        check("the menu opens", app._in_settings)
+        said = last_speech().lower()
+        check("inverted mode comes first", "inverted mode" in said, said)
+        check("the description is read", "real chess board" in said, said)
+        check("it says which way it is set", "inverted mode, off" in said, said)
+
+        before = app.settings["inverted"]
+        driver.key("Right")
+        check("right toggles it", app.settings["inverted"] != before)
+        check("the new value is announced", "inverted mode, on" in last_speech().lower(),
+              last_speech())
+        driver.key("Return")
+        check("enter toggles it back", app.settings["inverted"] == before)
+
+        driver.key("Down")
+        check("down reaches opponent strength",
+              "opponent strength" in last_speech().lower(), last_speech())
+        level_before = app.settings["level"]
+        driver.key("Right")
+        check("right raises the level", app.settings["level"] == level_before + 1)
+        check("the engine hears about it", app.opponent.level == level_before + 1)
+
+        # Numbers must stop at their ends rather than wrapping to nonsense.
+        for _ in range(12):
+            driver.key("Right")
+        check("the level stops at 8", app.settings["level"] == 8, str(app.settings["level"]))
+        check("the ceiling is explained", "highest" in last_speech().lower(), last_speech())
+        for _ in range(12):
+            driver.key("Left")
+        check("the level stops at 1", app.settings["level"] == 1, str(app.settings["level"]))
+
+        driver.key("End")
+        check("end reaches the last item",
+              app._settings_index == len(helm_chess.SETTINGS_ITEMS) - 1)
+        driver.key("Down")
+        check("it wraps round to the first", app._settings_index == 0)
+
+        driver.key("Escape")
+        check("escape closes the menu", not app._in_settings)
+        check("closing says whose move it is", "to move" in last_speech().lower(),
+              last_speech())
+
+        # Arrows must go back to steering the board once the menu is gone.
+        app.cursor = chess.E1
+        driver.arrows("Up")
+        check("the arrows drive the board again", app.cursor == chess.E2,
+              chess.square_name(app.cursor))
+
+        app.opponent.set_level(1)
+        app.settings["level"] = 1
+    finally:
+        release_app(app)
+
+
+def test_inverted_mode():
+    print("\ninverted mode")
+    app = make_app(play_as="black")
+    driver = Driver(app)
+    try:
+        fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+
+        app.settings["inverted"] = False
+        driver.setup(fen, chess.E7)
+        driver.key("Return")
+        driver.arrows("Up")
+        check("off: the board faces you, up is forward", app.ghost == chess.E6,
+              chess.square_name(app.ghost) if app.ghost else "none")
+
+        app.settings["inverted"] = True
+        driver.setup(fen, chess.E7)
+        driver.key("Return")
+        driver.arrows("Up")
+        check("on: the board stays white's way up, so up goes backwards",
+              app.ghost is None or app.ghost == chess.E7,
+              chess.square_name(app.ghost) if app.ghost else "none")
+        driver.arrows("Down")
+        check("on: down is forward for black", app.ghost == chess.E6,
+              chess.square_name(app.ghost) if app.ghost else "none")
+
+        app.settings["inverted"] = False
+    finally:
+        release_app(app)
+
+
+def test_settings_migration():
+    print("\nsettings migration")
+    # The old name meant the opposite of the new one.
+    check("old flip_for_black true becomes inverted false",
+          _migrated({"flip_for_black": True})["inverted"] is False)
+    check("old flip_for_black false becomes inverted true",
+          _migrated({"flip_for_black": False})["inverted"] is True)
+    check("the old key is not kept around",
+          "flip_for_black" not in _migrated({"flip_for_black": True}))
+
+
+def _migrated(stored):
+    import json
+    import tempfile
+    path = os.path.join(tempfile.mkdtemp(), "settings.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(stored, handle)
+    original = helm_chess.settings_path
+    helm_chess.settings_path = lambda: path
+    try:
+        return helm_chess.load_settings()
+    finally:
+        helm_chess.settings_path = original
+
+
 def main():
     print("Helm Chess self-test")
     print("=" * 60)
@@ -680,6 +797,9 @@ def main():
     test_shift_preview()
     test_extras()
     test_black_orientation()
+    test_settings_menu()
+    test_inverted_mode()
+    test_settings_migration()
     shutdown()
 
     print("=" * 60)

@@ -89,6 +89,7 @@ Promotion asks which piece: **q**, **r**, **b**, or **n**.
 - **H** asks the engine for a hint.
 - **U** takes back your last move and the reply, so a blunder becomes a
   lesson instead of a lost game.
+- **O** opens the settings menu.
 - **Plus** and **minus** change the opponent's strength, 1 to 8.
 - **Control N** starts a new game. **Control S** saves the game to a PGN
   file. **Control U** checks for updates. **Control Q** quits.
@@ -125,22 +126,30 @@ Add `--check` to see what is available without installing it. The updater
 keeps a copy of the previous version in `.update-backup`, and restores it if
 anything goes wrong partway through.
 
-## Your settings
+## Settings
 
-Settings and saved games live in `%APPDATA%\HelmChess`, not in the
-project folder, so updating the game never disturbs them.
+Press **O** to open the settings menu. Up and down walk the list, left and
+right change the setting under you, and escape closes and saves. Each entry
+reads out its name, how it is currently set, and what it does. Nothing is a
+dialog box; it is all spoken.
 
-`settings.json` there is worth knowing about:
-
-- `chord_ms` is how long the game waits for a second arrow key before
+- **Inverted mode** (off by default). When playing as black, should the
+  board face you like a real chess board, or should it stay as if you were
+  playing white? Off means the board faces you, so up is always forward for
+  your own pieces. On leaves the board the way white sees it, which means
+  you play top down and up moves your pieces backwards.
+- **Opponent strength**, 1 to 8.
+- **You play**, white or black. Applies at the next new game.
+- **Phonetic squares**. Says "echo 4" instead of "e4", for synthesisers that
+  mangle single letters next to digits.
+- **Diagonal timing**. How long the game waits for a second arrow key before
   deciding you meant a single direction. It starts at 90 milliseconds. Raise
   it if diagonals are not registering, lower it if single presses feel slow.
-- `phonetic_files` says "echo 4" instead of "e4", if your synthesiser
-  mangles single letters next to digits.
-- `flip_for_black` makes up mean forward when you play black. Turn it off if
-  you would rather up always meant towards rank 8.
-- `level`, `play_as`, `sounds`, `prefer_stockfish`, `stockfish_path`, and
-  `check_updates_on_start` do what they sound like.
+- **Sound effects**, **Use Stockfish when available**, and **Check for
+  updates on start**.
+
+Settings and saved games live in `%APPDATA%\HelmChess`, not in the project
+folder, so updating the game never disturbs them.
 
 ## Checking it still works
 
