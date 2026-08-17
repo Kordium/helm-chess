@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3
+
+- The sword unsheathe is now the capture sound, replacing the two sword
+  clashes.
+- Picking a piece up has no sound for the moment, on purpose, until there is
+  one that tells it apart from a capture.
+
 ## 1.0.2
 
 - Added a `sounds` folder of sword and impact effects, all Creative Commons
