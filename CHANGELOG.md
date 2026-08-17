@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+- Renamed to **Project Golem**. A golem does exactly what it is told and
+  cannot step outside its instructions, which is what this program does to a
+  chess piece: you take hold of it, and it will only ever move within the
+  rules.
+- The old repository address redirects to the new one, so an older copy will
+  still find its updates.
+- Your settings and saved games are carried over from the previous name the
+  first time you run it, so nothing is lost.
+
 ## 1.0.5
 
 - The game now opens on a **main menu**: start game, settings, exit. Start

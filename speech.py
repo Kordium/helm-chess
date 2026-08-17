@@ -1,4 +1,4 @@
-"""Speech output for Helm Chess.
+"""Speech output for Project Golem.
 
 Talks to whatever screen reader is running (NVDA, JAWS, ...) through
 accessible_output2, and falls back to SAPI or plain stdout if none is

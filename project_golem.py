@@ -1,4 +1,4 @@
-"""Helm Chess -- a keyboard chess client for screen reader users.
+"""Project Golem -- a keyboard chess client for screen reader users.
 
 Movement works the way the Monarch's chess app works. With nothing
 selected the arrow keys walk a cursor around the board and every square is
@@ -17,6 +17,7 @@ spoken.
 import argparse
 import json
 import os
+import shutil
 import sys
 import threading
 import tkinter as tk
@@ -36,7 +37,7 @@ except ImportError:
     winsound = None
 
 
-APP_NAME = "Helm Chess"
+APP_NAME = "Project Golem"
 
 ARROWS = {
     "Up": (0, 1),
@@ -161,9 +162,31 @@ SETTINGS_ITEMS = [
 
 def settings_path():
     base = os.environ.get("APPDATA") or os.path.expanduser("~")
-    folder = os.path.join(base, "HelmChess")
-    os.makedirs(folder, exist_ok=True)
+    folder = os.path.join(base, "ProjectGolem")
+    if not os.path.isdir(folder):
+        os.makedirs(folder, exist_ok=True)
+        _carry_over_old_settings(base, folder)
     return os.path.join(folder, "settings.json")
+
+
+def _carry_over_old_settings(base, folder):
+    """Bring settings and saved games over from the name this used to have.
+
+    Renaming the program should not quietly lose the diagonal timing you
+    spent an evening getting right.
+    """
+    for previous in ("HelmChess", "MonarchChess"):
+        old = os.path.join(base, previous)
+        if not os.path.isdir(old):
+            continue
+        for name in ("settings.json", "games.pgn"):
+            source = os.path.join(old, name)
+            if os.path.isfile(source) and not os.path.isfile(os.path.join(folder, name)):
+                try:
+                    shutil.copy2(source, os.path.join(folder, name))
+                except OSError:
+                    pass
+        break
 
 
 def load_settings():
@@ -191,7 +214,7 @@ def save_settings(values):
         pass
 
 
-class HelmChess(tk.Tk):
+class ProjectGolem(tk.Tk):
     def __init__(self, settings):
         super().__init__()
         self.settings = settings
@@ -943,7 +966,7 @@ class HelmChess(tk.Tk):
 
     def save_game(self):
         game = chess.pgn.Game.from_board(self.board)
-        game.headers["Event"] = "Helm Chess practice"
+        game.headers["Event"] = "Project Golem practice"
         white = "You" if self.human_color == chess.WHITE else self.opponent.name
         black = self.opponent.name if self.human_color == chess.WHITE else "You"
         game.headers["White"] = white
@@ -1306,7 +1329,7 @@ class HelmChess(tk.Tk):
                 self.refuse("Update failed: %s" % result["error"])
                 return
             self.say("Update installed, %d files replaced. Close and reopen "
-                     "Helm Chess to use the new version."
+                     "Project Golem to use the new version."
                      % len(result["files"]))
 
         self.after(200, collect)
@@ -1329,7 +1352,7 @@ class HelmChess(tk.Tk):
 
 
 HELP_TEXT = (
-    "Helm Chess keys. "
+    "Project Golem keys. "
     "Arrow keys move the cursor around the board when nothing is selected. "
     "Two arrows at the same time move diagonally. "
     "Enter picks up the piece under the cursor. "
@@ -1351,7 +1374,7 @@ HELP_TEXT = (
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Helm Chess, a keyboard chess client.")
+    parser = argparse.ArgumentParser(description="Project Golem, a keyboard chess client.")
     parser.add_argument("--black", action="store_true", help="play as black")
     parser.add_argument("--white", action="store_true", help="play as white")
     parser.add_argument("--level", type=int, help="opponent strength, 1 to 8")
@@ -1371,7 +1394,7 @@ def main():
         settings["prefer_stockfish"] = False
 
     # The game opens on the main menu; nothing is played until you choose to.
-    app = HelmChess(settings)
+    app = ProjectGolem(settings)
     app.mainloop()
 
 

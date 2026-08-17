@@ -1,4 +1,4 @@
-"""Self-test for Helm Chess.
+"""Self-test for Project Golem.
 
 Drives the real application through real key events -- chords included --
 and checks what it says and what it does. Speech is captured instead of
@@ -26,10 +26,10 @@ speech.speak = _capture  # must happen before the app imports are used
 
 import describe          # noqa: E402
 import engine as engine_module  # noqa: E402
-import helm_chess     # noqa: E402
+import project_golem     # noqa: E402
 import updater           # noqa: E402
 
-helm_chess.speech.speak = _capture
+project_golem.speech.speak = _capture
 
 PASSED = []
 FAILED = []
@@ -229,7 +229,7 @@ def make_app(**overrides):
     """
     global _APP
     if _APP is None:
-        settings = dict(helm_chess.DEFAULT_SETTINGS)
+        settings = dict(project_golem.DEFAULT_SETTINGS)
         settings.update({
             "level": 1,
             "check_updates_on_start": False,
@@ -237,7 +237,7 @@ def make_app(**overrides):
             "sounds": False,
             "chord_ms": 60,
         })
-        _APP = helm_chess.HelmChess(settings)
+        _APP = project_golem.ProjectGolem(settings)
         _APP.withdraw()     # no window flashing up during the test
         Driver(_APP).pump(0.5)   # let the opening announcement get out of the way
 
@@ -772,12 +772,12 @@ def test_updater_folder_replacement():
         top_files["NOTES.txt"] = padding
         with zipfile.ZipFile(buffer, "w") as archive:
             for name, content in top_files.items():
-                archive.writestr("helm-chess-abc123/%s" % name, content)
+                archive.writestr("project-golem-abc123/%s" % name, content)
             for folder, files in folders.items():
                 for name, content in files.items():
-                    archive.writestr("helm-chess-abc123/%s/%s" % (folder, name), content)
+                    archive.writestr("project-golem-abc123/%s/%s" % (folder, name), content)
                 if not files:
-                    archive.writestr("helm-chess-abc123/%s/" % folder, "")
+                    archive.writestr("project-golem-abc123/%s/" % folder, "")
         return buffer.getvalue()
 
     def install_from(payload, install_dir):
@@ -792,7 +792,7 @@ def test_updater_folder_replacement():
             updater._open = original
 
     def fresh_install():
-        folder = tempfile.mkdtemp(prefix="helm-install-")
+        folder = tempfile.mkdtemp(prefix="golem-install-")
         with open(os.path.join(folder, "version.py"), "w") as handle:
             handle.write('__version__ = "1.0.0"\n')
         sounds = os.path.join(folder, "sounds")
@@ -848,9 +848,9 @@ def test_updater_folder_replacement():
     install = fresh_install()
     try:
         install_from(make_zip({"something_else.py": "nope"}, {}), install)
-        check("a download that is not Helm Chess is refused", False)
+        check("a download that is not Project Golem is refused", False)
     except updater.UpdateError:
-        check("a download that is not Helm Chess is refused", True)
+        check("a download that is not Project Golem is refused", True)
     check("the refused download changed nothing",
           sound_files(install) == untouched, str(sound_files(install)))
 
@@ -867,7 +867,7 @@ def test_startup_and_menus():
         app._open_at_start()
         opening = all_speech_since(0).lower()
 
-        check("it names itself and the version", "helm chess version" in opening, opening)
+        check("it names itself and the version", "project golem version" in opening, opening)
         check("it opens on the main menu", app._menu is not None)
         check("the main menu is announced", "main menu" in opening, opening)
         check("start game is the first option", "start game" in opening, opening)
@@ -1026,7 +1026,7 @@ def test_settings_menu():
 
         driver.key("End")
         check("end reaches the last item",
-              app._settings_index == len(helm_chess.SETTINGS_ITEMS) - 1)
+              app._settings_index == len(project_golem.SETTINGS_ITEMS) - 1)
         driver.key("Down")
         check("it wraps round to the first", app._settings_index == 0)
 
@@ -1094,16 +1094,16 @@ def _migrated(stored):
     path = os.path.join(tempfile.mkdtemp(), "settings.json")
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(stored, handle)
-    original = helm_chess.settings_path
-    helm_chess.settings_path = lambda: path
+    original = project_golem.settings_path
+    project_golem.settings_path = lambda: path
     try:
-        return helm_chess.load_settings()
+        return project_golem.load_settings()
     finally:
-        helm_chess.settings_path = original
+        project_golem.settings_path = original
 
 
 def main():
-    print("Helm Chess self-test")
+    print("Project Golem self-test")
     print("=" * 60)
     test_describe()
     test_engine()

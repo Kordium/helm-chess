@@ -1,4 +1,4 @@
-Sounds used by Helm Chess
+Sounds used by Project Golem
 ============================================================
 
 Every file here is Creative Commons 0 (public domain), taken

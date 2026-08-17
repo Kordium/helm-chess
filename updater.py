@@ -26,7 +26,7 @@ import zipfile
 
 from version import GITHUB_OWNER, GITHUB_REPO, __version__
 
-USER_AGENT = "helm-chess-updater/%s" % __version__
+USER_AGENT = "project-golem-updater/%s" % __version__
 TIMEOUT = 20
 
 API_LATEST = "https://api.github.com/repos/%s/%s/releases/latest"
@@ -131,7 +131,7 @@ def download_and_install(url, install_dir=None, backup=True):
     except zipfile.BadZipFile:
         raise UpdateError("the download was not a valid zip file")
 
-    staging = tempfile.mkdtemp(prefix="helm-chess-update-")
+    staging = tempfile.mkdtemp(prefix="project-golem-update-")
     backup_dir = None
     try:
         archive.extractall(staging)
@@ -147,7 +147,7 @@ def download_and_install(url, install_dir=None, backup=True):
             and os.path.isfile(os.path.join(source, name))
         ]
         if not any(name == "version.py" for name in incoming):
-            raise UpdateError("the download does not look like Helm Chess")
+            raise UpdateError("the download does not look like Project Golem")
 
         if backup:
             backup_dir = os.path.join(install_dir, ".update-backup")
@@ -230,14 +230,14 @@ def update(check_only=False):
     """Convenience wrapper used by the command line and by the game."""
     result = check_for_update()
     if result is None:
-        return "Helm Chess %s is up to date." % __version__
+        return "Project Golem %s is up to date." % __version__
     latest, url, notes = result
     if check_only:
         message = "Version %s is available (you have %s)." % (latest, __version__)
         return message + ("\n\n" + notes if notes else "")
     changed = download_and_install(url)
     return ("Updated to version %s. %d files replaced. "
-            "Restart Helm Chess to use it." % (latest, len(changed)))
+            "Restart Project Golem to use it." % (latest, len(changed)))
 
 
 if __name__ == "__main__":

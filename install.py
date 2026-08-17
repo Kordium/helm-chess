@@ -1,4 +1,4 @@
-"""Installer for Helm Chess.
+"""Installer for Project Golem.
 
 Checks that this Python can run the game, installs the two libraries it
 needs, optionally puts a Stockfish binary in place, and offers a desktop
@@ -117,8 +117,8 @@ def make_shortcut():
         report(WARN, "no Desktop folder found, skipping the shortcut")
         return True
 
-    target = os.path.join(desktop, "Helm Chess.lnk")
-    launcher = os.path.join(HERE, "helm_chess.py")
+    target = os.path.join(desktop, "Project Golem.lnk")
+    launcher = os.path.join(HERE, "project_golem.py")
     # pythonw runs it without a console window tagging along.
     runner = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
     if not os.path.isfile(runner):
@@ -129,7 +129,7 @@ def make_shortcut():
         "$s.TargetPath = '%s'; "
         "$s.Arguments = '\"%s\"'; "
         "$s.WorkingDirectory = '%s'; "
-        "$s.Description = 'Helm Chess'; "
+        "$s.Description = 'Project Golem'; "
         "$s.Save()" % (target, runner, launcher, HERE)
     )
     result = subprocess.run(
@@ -152,19 +152,19 @@ def verify():
         except Exception as exc:
             report(FAIL, "%s.py failed to load: %s" % (module, exc))
             return False
-    report(OK, "all Helm Chess modules load")
+    report(OK, "all Project Golem modules load")
     return True
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Install Helm Chess.")
+    parser = argparse.ArgumentParser(description="Install Project Golem.")
     parser.add_argument("--check", action="store_true",
                         help="report what is missing without installing anything")
     parser.add_argument("--no-shortcut", action="store_true",
                         help="do not create a desktop shortcut")
     args = parser.parse_args()
 
-    print("Helm Chess installer")
+    print("Project Golem installer")
     print("=" * 60)
 
     steps = [check_python(), check_tkinter()]
@@ -191,7 +191,7 @@ def main():
 
     print("=" * 60)
     print("Done. Start the game with:")
-    print("  python \"%s\"" % os.path.join(HERE, "helm_chess.py"))
+    print("  python \"%s\"" % os.path.join(HERE, "project_golem.py"))
     print("Press F1 inside the game for the key list.")
     return 0
 

@@ -1,13 +1,17 @@
-# Helm Chess
+# Project Golem
 
-**H**ear **E**very **L**egal **M**ove.
+*It moves only as the rules allow.*
 
 A chess client you play entirely from the keyboard, built for screen reader
 users. Instead of typing coordinates, you steer: walk a cursor around the
 board, pick up a piece, and then drive that piece where you want it. If a
 move is not legal, the piece simply will not go there, and you are told why.
 
-Helm Chess is an independent project. It is not affiliated with, endorsed
+A golem does exactly what it is told and cannot step outside its
+instructions. That is the idea here: you take hold of a piece and it will
+move for you, but only ever within the rules.
+
+Project Golem is an independent project. It is not affiliated with, endorsed
 by, or derived from any other chess product, and it shares no code with one.
 
 It runs on any computer that can run Python. No graphics card, no browser,
@@ -33,7 +37,7 @@ To see what it would do without changing anything: `python install.py --check`
 Start it from the desktop shortcut, or with:
 
 ```bash
-python helm_chess.py
+python project_golem.py
 ```
 
 It opens on the **main menu**, not on a board. Up and down walk the list,
@@ -168,7 +172,7 @@ dialog box; it is all spoken.
 - **Sound effects**, **Use Stockfish when available**, and **Check for
   updates on start**.
 
-Settings and saved games live in `%APPDATA%\HelmChess`, not in the project
+Settings and saved games live in `%APPDATA%\ProjectGolem`, not in the project
 folder, so updating the game never disturbs them.
 
 ## Checking it still works
